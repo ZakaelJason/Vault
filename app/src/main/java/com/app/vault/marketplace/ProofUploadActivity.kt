@@ -2,24 +2,28 @@ package com.app.vault.marketplace
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.app.vault.marketplace.databinding.ActivityProofUploadBinding
-import java.text.NumberFormat
-import java.util.Locale
+import java.io.File
+import java.io.FileOutputStream
+import java.util.UUID
 
 class ProofUploadActivity : AppCompatActivity() {
     private lateinit var b: ActivityProofUploadBinding
     private var selectedImageUri: Uri? = null
+    
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
             selectedImageUri = it
             b.ivProof.setImageURI(it)
-            b.ivProof.visibility = android.view.View.VISIBLE
-            b.tvProofPlaceholder.visibility = android.view.View.GONE
+            b.ivProof.visibility = View.VISIBLE
+            b.tvProofPlaceholder.visibility = View.GONE
         }
     }
 
@@ -43,62 +47,82 @@ class ProofUploadActivity : AppCompatActivity() {
         val isSeller = txn.sellerId == session.getUserId()
         val isBuyer = txn.buyerId == session.getUserId()
 
+        // Load image or placeholder
+        if (txn.proofImageUri.isNotEmpty()) {
+            val file = File(txn.proofImageUri)
+            if (file.exists()) {
+                b.ivProof.setImageBitmap(BitmapFactory.decodeFile(file.absolutePath))
+                b.ivProof.visibility = View.VISIBLE
+                b.tvProofPlaceholder.visibility = View.GONE
+            } else {
+                b.ivProof.setImageResource(R.drawable.placeholder_bukti)
+                b.ivProof.visibility = View.VISIBLE
+                b.tvProofPlaceholder.visibility = View.GONE
+            }
+        } else if (txn.status != "Pending") {
+            b.ivProof.setImageResource(R.drawable.placeholder_bukti)
+            b.ivProof.visibility = View.VISIBLE
+            b.tvProofPlaceholder.visibility = View.GONE
+        }
+
         when {
-            isSeller && txn.status == "Pending" -> setupSellerPendingView(db, txn)
+            isSeller && (txn.status == "Pending" || txn.status == "Proof Uploaded") -> setupSellerUploadView(db, txn)
             isBuyer && txn.status == "Proof Uploaded" -> setupBuyerProofView(db, txn)
             else -> {
-                b.btnSelectImage.visibility = android.view.View.GONE
+                b.btnSelectImage.visibility = View.GONE
                 b.btnAction.isEnabled = false
                 b.btnAction.text = "No Action Required"
-                if (txn.proofImageUri.isNotEmpty() && txn.proofImageUri != "mock_proof_uri") {
-                    b.ivProof.setImageURI(Uri.parse(txn.proofImageUri))
-                    b.ivProof.visibility = android.view.View.VISIBLE
-                    b.tvProofPlaceholder.visibility = android.view.View.GONE
-                } else if (txn.status != "Pending") {
-                    b.tvProofPlaceholder.text = "PROOF_SUBMITTED_ID_${txn.id}"
-                }
             }
         }
     }
 
-    private fun setupSellerPendingView(db: DatabaseHelper, txn: Transaction) {
-        b.tvTitle.text = "Upload Proof"
-        b.btnSelectImage.visibility = android.view.View.VISIBLE
+    private fun setupSellerUploadView(db: DatabaseHelper, txn: Transaction) {
+        b.tvTitle.text = if (txn.status == "Pending") "Upload Proof" else "Update Proof"
+        b.btnSelectImage.visibility = View.VISIBLE
         b.btnAction.text = "Submit Proof"
-        b.tvProofPlaceholder.text = "Tap 'Select Screenshot' to choose delivery proof"
-
+        
         b.btnSelectImage.setOnClickListener { pickImage.launch("image/*") }
 
         b.btnAction.setOnClickListener {
             val uri = selectedImageUri
-            if (uri == null) { Toast.makeText(this, "Please select a proof image", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
-            db.updateTransactionProof(txn.id, uri.toString())
-            Toast.makeText(this, "Proof uploaded!", Toast.LENGTH_SHORT).show()
-            finish()
+            if (uri == null && txn.proofImageUri.isEmpty()) { 
+                Toast.makeText(this, "Please select a proof image", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener 
+            }
+            
+            val finalPath = if (uri != null) copyImageToInternal(uri) else txn.proofImageUri
+            if (finalPath != null) {
+                db.updateTransactionProof(txn.id, finalPath)
+                Toast.makeText(this, "Proof updated successfully!", Toast.LENGTH_SHORT).show()
+                finish()
+            }
         }
     }
 
     private fun setupBuyerProofView(db: DatabaseHelper, txn: Transaction) {
         b.tvTitle.text = "Confirm Receipt"
-        b.btnSelectImage.visibility = android.view.View.GONE
+        b.btnSelectImage.visibility = View.GONE
         b.btnAction.text = "Confirm Receipt"
-
-        if (txn.proofImageUri.isNotEmpty() && txn.proofImageUri != "mock_proof_uri") {
-            try {
-                b.ivProof.setImageURI(Uri.parse(txn.proofImageUri))
-                b.ivProof.visibility = android.view.View.VISIBLE
-                b.tvProofPlaceholder.visibility = android.view.View.GONE
-            } catch (e: Exception) {
-                b.tvProofPlaceholder.text = "PROOF_IMAGE_ID_${txn.id}"
-            }
-        } else {
-            b.tvProofPlaceholder.text = "MOCK_PROOF_ID_${txn.id}"
-        }
 
         b.btnAction.setOnClickListener {
             db.completeTransaction(txn.id)
             Toast.makeText(this, "Transaction completed!", Toast.LENGTH_SHORT).show()
             finish()
+        }
+    }
+
+    private fun copyImageToInternal(uri: Uri): String? {
+        return try {
+            val inputStream = contentResolver.openInputStream(uri)
+            val fileName = "proof_${UUID.randomUUID()}.jpg"
+            val file = File(filesDir, fileName)
+            val outputStream = FileOutputStream(file)
+            inputStream?.copyTo(outputStream)
+            inputStream?.close()
+            outputStream.close()
+            file.absolutePath
+        } catch (e: Exception) {
+            null
         }
     }
 }
