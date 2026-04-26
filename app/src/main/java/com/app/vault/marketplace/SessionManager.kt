@@ -14,5 +14,11 @@ class SessionManager(ctx: Context) {
     fun getUserId() = prefs.getInt("user_id", -1)
     fun getUsername() = prefs.getString("username", "") ?: ""
 
+    fun isFirstRun(): Boolean {
+        val first = prefs.getBoolean("first_run", true)
+        if (first) prefs.edit().putBoolean("first_run", false).apply()
+        return first
+    }
+
     fun clear() = prefs.edit().clear().apply()
 }

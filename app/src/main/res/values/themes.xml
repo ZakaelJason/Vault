@@ -45,4 +45,7 @@
         <item name="boxCornerRadiusBottomStart">4dp</item>
         <item name="boxCornerRadiusBottomEnd">4dp</item>
     </style>
+    <style name="VaultDialog" parent="Theme.MaterialComponents.DayNight.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
 </resources>

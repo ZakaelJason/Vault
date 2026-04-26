@@ -1,35 +1,84 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_primary">
 
+    <!-- Stage 1: Initial Brand -->
     <LinearLayout
-        android:layout_gravity="center"
-        android:orientation="vertical"
-        android:gravity="center"
+        android:id="@+id/layoutInitial"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="visible">
+
+        <ImageView
+            android:id="@+id/ivLogoInitial"
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:layout_marginBottom="24dp"
+            android:src="@drawable/logo_vault"
+            android:scaleType="centerInside" />
 
         <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.3"
             android:text="VAULT"
             android:textColor="@color/accent"
             android:textSize="48sp"
-            android:letterSpacing="0.3"
-            android:textStyle="bold"
-            android:fontFamily="monospace"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+            android:textStyle="bold" />
 
         <TextView
-            android:text="Gaming Marketplace"
-            android:textColor="@color/text_secondary"
-            android:textSize="14sp"
-            android:letterSpacing="0.1"
-            android:layout_marginTop="8dp"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
-
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:letterSpacing="0.1"
+            android:text="Your Assets, Secured."
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp" />
     </LinearLayout>
+
+    <!-- Stage 2: Onboarding Auto-Progress -->
+    <RelativeLayout
+        android:id="@+id/layoutOnboarding"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone">
+
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/viewPager"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/progressBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentTop="true"
+            android:layout_marginTop="48dp"
+            android:layout_marginHorizontal="24dp"
+            app:indicatorColor="@color/accent"
+            app:trackColor="@color/placeholder"
+            app:trackThickness="4dp"
+            android:max="1000" />
+
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tabLayout"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_centerHorizontal="true"
+            android:layout_marginBottom="48dp"
+            android:background="@android:color/transparent"
+            app:tabBackground="@drawable/tab_selector"
+            app:tabGravity="center"
+            app:tabIndicatorHeight="0dp"
+            app:tabMaxWidth="12dp" />
+    </RelativeLayout>
 
 </FrameLayout>
