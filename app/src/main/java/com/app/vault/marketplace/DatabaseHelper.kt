@@ -47,7 +47,7 @@ data class Comment(
     val timestamp: Long
 )
 
-class DatabaseHelper(ctx: Context) : SQLiteOpenHelper(ctx, "vault.db", null, 6) {
+class DatabaseHelper(ctx: Context) : SQLiteOpenHelper(ctx, "vault.db", null, 7) {
 
     companion object {
         const val T_USERS = "users"
@@ -97,9 +97,9 @@ class DatabaseHelper(ctx: Context) : SQLiteOpenHelper(ctx, "vault.db", null, 6) 
 
         // Seed users
         listOf(
-            Triple("alice", "pass123", "alice@example.com"),
-            Triple("bob", "pass123", "bob@example.com"),
-            Triple("charlie", "pass123", "charlie@example.com")
+            Triple("alice", "pass123", "alice@gmail.com"),
+            Triple("bob", "pass123", "bob@gmail.com"),
+            Triple("charlie", "pass123", "charlie@gmail.com")
         ).forEach { (u, p, e) ->
             db.insert(T_USERS, null, ContentValues().apply {
                 put("username", u)
