@@ -32,6 +32,7 @@ data class Transaction(
     val sellerId: Int,
     val status: String,
     val proofImageUri: String,
+    val paymentMethod: String,
     val itemName: String = "",
     val buyerName: String = "",
     val sellerName: String = ""
@@ -47,7 +48,7 @@ data class Comment(
     val timestamp: Long
 )
 
-class DatabaseHelper(ctx: Context) : SQLiteOpenHelper(ctx, "vault.db", null, 7) {
+class DatabaseHelper(ctx: Context) : SQLiteOpenHelper(ctx, "vault.db", null, 8) {
 
     companion object {
         const val T_USERS = "users"
@@ -83,7 +84,8 @@ class DatabaseHelper(ctx: Context) : SQLiteOpenHelper(ctx, "vault.db", null, 7) 
                     "buyer_id INTEGER, " +
                     "seller_id INTEGER, " +
                     "status TEXT, " +
-                    "proof_image_uri TEXT)"
+                    "proof_image_uri TEXT,"+
+                    "payment_method TEXT)"
         )
         db.execSQL(
             "CREATE TABLE $T_COMMENTS(" +
@@ -305,17 +307,19 @@ class DatabaseHelper(ctx: Context) : SQLiteOpenHelper(ctx, "vault.db", null, 7) 
                 c.getString(5),
                 c.getString(6),
                 c.getString(7),
-                c.getString(8)
+                c.getString(8),
+                c.getString(9)
             )
         )
         c.close()
         return list
     }
 
-    fun insertTransaction(itemId: Int, buyerId: Int, sellerId: Int): Long {
+    fun insertTransaction(itemId: Int, buyerId: Int, sellerId: Int, paymentMethod: String): Long {
         return writableDatabase.insert(T_TRANS, null, ContentValues().apply {
             put("item_id", itemId); put("buyer_id", buyerId); put("seller_id", sellerId)
             put("status", "Pending"); put("proof_image_uri", "")
+            put("payment_method", paymentMethod) // simpan detail opsi transasksi
         })
     }
 
@@ -348,7 +352,8 @@ class DatabaseHelper(ctx: Context) : SQLiteOpenHelper(ctx, "vault.db", null, 7) 
             c.getString(5),
             c.getString(6),
             c.getString(7),
-            c.getString(8)
+            c.getString(8),
+            c.getString(9)
         ).also { c.close() }
         else {
             c.close(); null
