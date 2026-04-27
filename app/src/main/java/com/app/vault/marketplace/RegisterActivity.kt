@@ -17,13 +17,17 @@ class RegisterActivity : AppCompatActivity() {
         db = DatabaseHelper(this)
 
         b.btnRegister.setOnClickListener {
+            val e = b.etEmail.text.toString().trim()
             val u = b.etUsername.text.toString().trim()
             val p = b.etPassword.text.toString().trim()
             val c = b.etConfirm.text.toString().trim()
+            if (e.isEmpty() || u.isEmpty() || p.isEmpty() || c.isEmpty()) { toast("Fill all fields"); return@setOnClickListener }
+
+            if (!android.util.Patterns.EMAIL_ADDRESS.matcher(e).matches()) { toast("Invalid email format"); return@setOnClickListener }
             if (u.isEmpty() || p.isEmpty() || c.isEmpty()) { toast("Fill all fields"); return@setOnClickListener }
             if (p != c) { toast("Passwords do not match"); return@setOnClickListener }
             if (p.length < 6) { toast("Password min 6 chars"); return@setOnClickListener }
-            if (db.register(u, p)) { toast("Account created!"); finish() }
+            if (db.register(e, u, p)) { toast("Account created!"); finish() }
             else toast("Username already taken")
         }
 

@@ -158,11 +158,11 @@ class DatabaseHelper(ctx: Context) : SQLiteOpenHelper(ctx, "vault.db", null, 8) 
         }
     }
 
-    fun register(username: String, password: String): Boolean {
+    fun register(email: String, username: String, password: String): Boolean {
         return try {
             writableDatabase.insert(T_USERS, null, ContentValues().apply {
-                put("username", username); put("password", password)
-                put("email", ""); put("description", ""); put("avatar_uri", "")
+                put("email", email); put("username", username); put("password", password)
+                put("description", ""); put("avatar_uri", "")
             }) != -1L
         } catch (e: Exception) {
             false
