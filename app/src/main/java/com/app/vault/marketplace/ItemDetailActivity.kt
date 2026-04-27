@@ -3,6 +3,7 @@ package com.app.vault.marketplace
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.text.Selection
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.Toast
@@ -14,6 +15,9 @@ import com.app.vault.marketplace.databinding.DialogReplyBinding
 import java.io.File
 import java.text.NumberFormat
 import java.util.Locale
+
+// Khusus layout dialog_checkout.xml
+
 
 class ItemDetailActivity : AppCompatActivity() {
     private lateinit var b: ActivityItemDetailBinding
@@ -74,25 +78,48 @@ class ItemDetailActivity : AppCompatActivity() {
         }
 
         b.btnShare.setOnClickListener {
-            val shareText = "${item.name} - ${fmt.format(item.price).replace("Rp", "Rp ")}. Available in Vault"
-            val sendIntent: Intent = Intent().apply {
-                action = Intent.ACTION_SEND
-                putExtra(Intent.EXTRA_TEXT, shareText)
-                type = "text/plain"
-            }
-            val shareIntent = Intent.createChooser(sendIntent, null)
-            startActivity(shareIntent)
+            showCheckoutDialog(item, fmt)
         }
 
         b.btnBuy.setOnClickListener {
-            db.insertTransaction(item.id, sm.getUserId(), item.sellerId)
-            Toast.makeText(this, "Order placed!", Toast.LENGTH_SHORT).show()
+            showCheckoutDialog(item, fmt)
+        }
+    }
+
+    // Member
+    // ikan opsi kepada pelanggan  untuk menggunakan opsi pembayaran yang diinginkan (seperti Bank Transfer atau E-wallet)
+    private fun showCheckoutDialog(item: Item, fmt: NumberFormat) {
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.dialog_checkout, null)
+        val tvItemName = view.findViewById<android.widget.TextView>(R.id.tvCheckoutItemName)
+        val tvTotal = view.findViewById<android.widget.TextView>(R.id.tvCheckoutTotal)
+        val rgPayment = view.findViewById<android.widget.RadioGroup>(R.id.rgPaymentMethods)
+        val btnConfirm = view.findViewById<android.widget.Button>(R.id.btnConfirmPurchase)
+
+        tvItemName.text = "Item: ${item.name}"
+        tvTotal.text = "Total: ${fmt.format(item.price).replace("Rp", "Rp ")}"
+
+        btnConfirm.setOnClickListener {
+            val selectedMethodId = rgPayment.checkedRadioButtonId
+            val paymentMethod = when (selectedMethodId) {
+                R.id.rbBankTransfer -> "Bank Transfer"
+                R.id.rbEWallet -> "E-Waller"
+                else -> "Unkown"
+            }
+
+            dialog.dismiss()
+
+            db.insertTransaction(item.id, sm.getUserId(), item.sellerId, paymentMethod)
+            Toast.makeText(this, "Order placed via $paymentMethod!", Toast.LENGTH_LONG).show()
             startActivity(Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra("open_orders", true)
             })
             finish()
         }
+
+        dialog.setContentView(view)
+        dialog.show()
     }
 
     private fun setProductPlaceholder(category: String) {
