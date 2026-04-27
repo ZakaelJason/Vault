@@ -3,7 +3,6 @@ package com.app.vault.marketplace
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Bundle
-import android.text.Selection
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.Toast
@@ -15,9 +14,6 @@ import com.app.vault.marketplace.databinding.DialogReplyBinding
 import java.io.File
 import java.text.NumberFormat
 import java.util.Locale
-
-// Khusus layout dialog_checkout.xml
-
 
 class ItemDetailActivity : AppCompatActivity() {
     private lateinit var b: ActivityItemDetailBinding
@@ -75,19 +71,23 @@ class ItemDetailActivity : AppCompatActivity() {
         if (isMine) {
             b.btnBuy.visibility = View.GONE
             b.layoutAddComment.visibility = View.GONE
+        } else {
+            b.btnBuy.visibility = View.VISIBLE
+            b.btnBuy.setOnClickListener {
+                showCheckoutDialog(item, fmt)
+            }
         }
 
         b.btnShare.setOnClickListener {
-            showCheckoutDialog(item, fmt)
-        }
-
-        b.btnBuy.setOnClickListener {
-            showCheckoutDialog(item, fmt)
+            val shareIntent = Intent().apply {
+                action = Intent.ACTION_SEND
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "Check out this item: ${item.name} for ${b.tvPrice.text}")
+            }
+            startActivity(Intent.createChooser(shareIntent, "Share via"))
         }
     }
 
-    // Member
-    // ikan opsi kepada pelanggan  untuk menggunakan opsi pembayaran yang diinginkan (seperti Bank Transfer atau E-wallet)
     private fun showCheckoutDialog(item: Item, fmt: NumberFormat) {
         val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
         val view = layoutInflater.inflate(R.layout.dialog_checkout, null)
@@ -103,8 +103,11 @@ class ItemDetailActivity : AppCompatActivity() {
             val selectedMethodId = rgPayment.checkedRadioButtonId
             val paymentMethod = when (selectedMethodId) {
                 R.id.rbBankTransfer -> "Bank Transfer"
-                R.id.rbEWallet -> "E-Waller"
-                else -> "Unkown"
+                R.id.rbEWallet -> "E-Wallet"
+                else -> {
+                    Toast.makeText(this, "Please select a payment method", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
             }
 
             dialog.dismiss()
