@@ -8,7 +8,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import com.app.vault.marketplace.databinding.FragmentMarketBinding
 import com.google.android.material.chip.Chip
 
@@ -32,7 +32,7 @@ class MarketFragment : Fragment() {
 
         b.tvWelcome.text = "Hello, ${session.getUsername()}!"
 
-        b.rvMarket.layoutManager = LinearLayoutManager(requireContext())
+        b.rvMarket.layoutManager = GridLayoutManager(requireContext(), 2)
         updateList()
 
         b.etSearch.addTextChangedListener(object : TextWatcher {
@@ -59,6 +59,12 @@ class MarketFragment : Fragment() {
                 startActivity(it)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Memastikan daftar produk diperbarui saat kembali ke fragment ini
+        updateList()
     }
 
     override fun onDestroyView() {

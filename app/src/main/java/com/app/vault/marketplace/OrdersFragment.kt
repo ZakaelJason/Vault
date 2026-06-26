@@ -1,4 +1,3 @@
-// OrdersFragment.kt
 package com.app.vault.marketplace
 
 import android.content.Intent
@@ -6,6 +5,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.app.vault.marketplace.databinding.FragmentOrdersBinding
@@ -16,6 +17,7 @@ class OrdersFragment : Fragment() {
     private val b get() = _b!!
     private var allTxns: List<Transaction> = emptyList()
     private var currentUserId: Int = -1
+    private lateinit var db: DatabaseHelper
 
     override fun onCreateView(inf: LayoutInflater, c: ViewGroup?, s: Bundle?): View {
         _b = FragmentOrdersBinding.inflate(inf, c, false)
@@ -24,6 +26,7 @@ class OrdersFragment : Fragment() {
 
     override fun onViewCreated(v: View, s: Bundle?) {
         super.onViewCreated(v, s)
+        db = DatabaseHelper(requireContext())
         val session = SessionManager(requireContext())
         currentUserId = session.getUserId()
         
@@ -46,7 +49,6 @@ class OrdersFragment : Fragment() {
     }
 
     private fun loadOrders() {
-        val db = DatabaseHelper(requireContext())
         allTxns = db.getUserTransactions(currentUserId)
         filterOrders(b.tabLayout.selectedTabPosition)
     }
@@ -60,12 +62,36 @@ class OrdersFragment : Fragment() {
             allTxns.filter { it.sellerId == currentUserId }
         }
 
-        b.rvOrders.adapter = OrderAdapter(filtered, currentUserId) { txn ->
-            Intent(requireContext(), ProofUploadActivity::class.java).also {
-                it.putExtra("transaction_id", txn.id)
-                startActivity(it)
+        b.rvOrders.adapter = OrderAdapter(
+            filtered, 
+            currentUserId, 
+            onAction = { txn ->
+                Intent(requireContext(), ProofUploadActivity::class.java).also {
+                    it.putExtra("transaction_id", txn.id)
+                    startActivity(it)
+                }
+            },
+            onDelete = { txn ->
+                showDeleteConfirmation(txn)
             }
-        }
+        )
+    }
+
+    private fun showDeleteConfirmation(txn: Transaction) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Hapus Pesanan")
+            .setMessage("Apakah Anda yakin ingin menghapus pesanan '${txn.itemName}' dari riwayat?")
+            .setPositiveButton("Hapus") { _, _ ->
+                val result = db.deleteTransaction(txn.id)
+                if (result > 0) {
+                    Toast.makeText(requireContext(), "Pesanan dihapus", Toast.LENGTH_SHORT).show()
+                    loadOrders()
+                } else {
+                    Toast.makeText(requireContext(), "Gagal menghapus", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Batal", null)
+            .show()
     }
 
     override fun onDestroyView() { super.onDestroyView(); _b = null }
