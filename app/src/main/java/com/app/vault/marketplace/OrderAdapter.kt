@@ -10,7 +10,8 @@ import com.app.vault.marketplace.databinding.ItemOrderBinding
 class OrderAdapter(
     private val txns: List<Transaction>,
     private val currentUserId: Int,
-    private val onAction: (Transaction) -> Unit
+    private val onAction: (Transaction) -> Unit,
+    private val onDelete: (Transaction) -> Unit
 ) : RecyclerView.Adapter<OrderAdapter.VH>() {
 
     inner class VH(val b: ItemOrderBinding) : RecyclerView.ViewHolder(b.root)
@@ -36,6 +37,7 @@ class OrderAdapter(
         val isSeller = txn.sellerId == currentUserId
         h.b.tvOrderRole.text = if (isSeller) "Your listing → Buyer: ${txn.buyerName}" else "You bought from: ${txn.sellerName}"
 
+        // Action button visibility logic
         val showAction = (isSeller && txn.status == "Pending") || (!isSeller && txn.status == "Proof Uploaded")
         if (showAction) {
             h.b.btnAction.visibility = View.VISIBLE
@@ -44,5 +46,8 @@ class OrderAdapter(
         } else {
             h.b.btnAction.visibility = View.GONE
         }
+
+        // Delete button logic
+        h.b.btnDelete.setOnClickListener { onDelete(txn) }
     }
 }
