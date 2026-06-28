@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:allowBackup="true"
@@ -23,12 +25,22 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".LoginActivity" android:exported="false" />
+        <activity android:name=".LoginActivity"    android:exported="false" />
         <activity android:name=".RegisterActivity" android:exported="false" />
-        <activity android:name=".MainActivity" android:exported="false" />
+        <activity android:name=".MainActivity"     android:exported="false" />
         <activity android:name=".AddProductActivity" android:exported="false" />
         <activity android:name=".ItemDetailActivity" android:exported="false" />
         <activity android:name=".ProofUploadActivity" android:exported="false" />
+        <activity android:name=".ChatActivity"     android:exported="false" />
+
+        <!-- BroadcastReceiver: mendeteksi perubahan koneksi internet -->
+        <receiver
+            android:name=".NetworkReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
+            </intent-filter>
+        </receiver>
 
     </application>
 </manifest>

@@ -7,6 +7,16 @@
     android:orientation="vertical"
     android:padding="4dp">
 
+    <!-- Nama pengirim (kamu) -->
+    <TextView
+        android:id="@+id/tvChatSender"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="4dp"
+        android:textColor="@color/text_secondary"
+        android:textSize="11sp"/>
+
+    <!-- Bubble pesan kanan (sent) -->
     <androidx.cardview.widget.CardView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -16,11 +26,11 @@
         app:cardElevation="0dp">
 
         <TextView
-            android:id="@+id/tvMessage"
+            android:id="@+id/tvChatMessage"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:padding="10dp"
             android:textColor="@color/bg_primary"
-            android:textSize="14sp" />
+            android:textSize="14sp"/>
     </androidx.cardview.widget.CardView>
 </LinearLayout>

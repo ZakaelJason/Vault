@@ -11,13 +11,20 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.app.vault.marketplace.databinding.FragmentOrdersBinding
 import com.google.android.material.tabs.TabLayout
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.firestore
 
 class OrdersFragment : Fragment() {
     private var _b: FragmentOrdersBinding? = null
     private val b get() = _b!!
-    private var allTxns: List<Transaction> = emptyList()
-    private var currentUserId: Int = -1
     private lateinit var db: DatabaseHelper
+    private lateinit var session: SessionManager
+    private val firestoreDb by lazy { Firebase.firestore }
+    private var listenerRegistration: ListenerRegistration? = null
+
+    private var allTxns: List<Transaction> = emptyList()
+    private var currentUsername: String = ""
 
     override fun onCreateView(inf: LayoutInflater, c: ViewGroup?, s: Bundle?): View {
         _b = FragmentOrdersBinding.inflate(inf, c, false)
@@ -26,53 +33,100 @@ class OrdersFragment : Fragment() {
 
     override fun onViewCreated(v: View, s: Bundle?) {
         super.onViewCreated(v, s)
-        db = DatabaseHelper(requireContext())
-        val session = SessionManager(requireContext())
-        currentUserId = session.getUserId()
-        
+        db      = DatabaseHelper(requireContext())
+        session = SessionManager(requireContext())
+        currentUsername = session.getUsername()
+
         b.rvOrders.layoutManager = LinearLayoutManager(requireContext())
-        
+
         b.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab?) {
-                filterOrders(tab?.position ?: 0)
-            }
+            override fun onTabSelected(tab: TabLayout.Tab?) { filterOrders(tab?.position ?: 0) }
             override fun onTabUnselected(tab: TabLayout.Tab?) {}
             override fun onTabReselected(tab: TabLayout.Tab?) {}
         })
 
-        loadOrders()
+        startFirestoreListener()
     }
 
-    override fun onResume() { 
-        super.onResume()
-        loadOrders() 
+    private fun startFirestoreListener() {
+        // Dengarkan transaksi di mana user ini adalah buyer ATAU seller
+        // Firestore tidak support OR query pada field berbeda, jadi kita buat dua listener
+        // dan merge hasilnya
+        var buyerTxns:  List<Transaction> = emptyList()
+        var sellerTxns: List<Transaction> = emptyList()
+
+        // Listener sebagai buyer
+        firestoreDb.collection("transactions")
+            .whereEqualTo("buyerUsername", currentUsername)
+            .addSnapshotListener { snapshot, _ ->
+                if (_b == null) return@addSnapshotListener
+                buyerTxns = snapshot?.documents?.mapNotNull { doc ->
+                    mapDocToTransaction(doc)
+                } ?: emptyList()
+                allTxns = (buyerTxns + sellerTxns).distinctBy { it.id }
+                filterOrders(b.tabLayout.selectedTabPosition)
+            }
+
+        // Listener sebagai seller
+        listenerRegistration = firestoreDb.collection("transactions")
+            .whereEqualTo("sellerUsername", currentUsername)
+            .addSnapshotListener { snapshot, _ ->
+                if (_b == null) return@addSnapshotListener
+                sellerTxns = snapshot?.documents?.mapNotNull { doc ->
+                    mapDocToTransaction(doc)
+                } ?: emptyList()
+                allTxns = (buyerTxns + sellerTxns).distinctBy { it.id }
+                filterOrders(b.tabLayout.selectedTabPosition)
+            }
     }
 
-    private fun loadOrders() {
-        allTxns = db.getUserTransactions(currentUserId)
-        filterOrders(b.tabLayout.selectedTabPosition)
+    private fun mapDocToTransaction(
+        doc: com.google.firebase.firestore.DocumentSnapshot
+    ): Transaction? {
+        return try {
+            Transaction(
+                id             = doc.id.hashCode(),           // gunakan hash docId sebagai id lokal
+                itemId         = (doc.getLong("itemId") ?: 0L).toInt(),
+                buyerId        = 0,                           // tidak dipakai, pakai username
+                sellerId       = 0,
+                status         = doc.getString("status") ?: "Pending",
+                proofImageUri  = doc.getString("proofImageUri") ?: "",
+                paymentMethod  = doc.getString("paymentMethod") ?: "",
+                itemName       = doc.getString("itemName") ?: "",
+                buyerName      = doc.getString("buyerUsername") ?: "",
+                sellerName     = doc.getString("sellerUsername") ?: "",
+                firestoreDocId = doc.id                        // simpan docId untuk update
+            )
+        } catch (e: Exception) { null }
     }
 
     private fun filterOrders(position: Int) {
+        if (_b == null) return
         val filtered = if (position == 0) {
-            // My Purchase: I am the buyer
-            allTxns.filter { it.buyerId == currentUserId }
+            allTxns.filter { it.buyerName == currentUsername }
         } else {
-            // My Listing: I am the seller
-            allTxns.filter { it.sellerId == currentUserId }
+            allTxns.filter { it.sellerName == currentUsername }
         }
 
         b.rvOrders.adapter = OrderAdapter(
-            filtered, 
-            currentUserId, 
+            filtered,
+            currentUsername,
             onAction = { txn ->
                 Intent(requireContext(), ProofUploadActivity::class.java).also {
-                    it.putExtra("transaction_id", txn.id)
+                    it.putExtra("firestore_doc_id", txn.firestoreDocId)
                     startActivity(it)
                 }
             },
-            onDelete = { txn ->
-                showDeleteConfirmation(txn)
+            onDelete = { txn -> showDeleteConfirmation(txn) },
+            onChat   = { txn ->
+                val otherUser = if (txn.buyerName == currentUsername)
+                    txn.sellerName else txn.buyerName
+                Intent(requireContext(), ChatActivity::class.java).also {
+                    it.putExtra("seller_username", txn.sellerName)
+                    it.putExtra("buyer_username",  txn.buyerName)
+                    it.putExtra("item_name",       txn.itemName)
+                    startActivity(it)
+                }
             }
         )
     }
@@ -80,19 +134,25 @@ class OrdersFragment : Fragment() {
     private fun showDeleteConfirmation(txn: Transaction) {
         AlertDialog.Builder(requireContext())
             .setTitle("Hapus Pesanan")
-            .setMessage("Apakah Anda yakin ingin menghapus pesanan '${txn.itemName}' dari riwayat?")
+            .setMessage("Hapus pesanan '${txn.itemName}' dari riwayat?")
             .setPositiveButton("Hapus") { _, _ ->
-                val result = db.deleteTransaction(txn.id)
-                if (result > 0) {
-                    Toast.makeText(requireContext(), "Pesanan dihapus", Toast.LENGTH_SHORT).show()
-                    loadOrders()
-                } else {
-                    Toast.makeText(requireContext(), "Gagal menghapus", Toast.LENGTH_SHORT).show()
+                // Hapus dari Firestore
+                if (txn.firestoreDocId.isNotEmpty()) {
+                    firestoreDb.collection("transactions")
+                        .document(txn.firestoreDocId)
+                        .delete()
                 }
+                // Hapus dari SQLite lokal juga
+                db.deleteTransaction(txn.itemId)
+                Toast.makeText(requireContext(), "Pesanan dihapus", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Batal", null)
             .show()
     }
 
-    override fun onDestroyView() { super.onDestroyView(); _b = null }
+    override fun onDestroyView() {
+        super.onDestroyView()
+        listenerRegistration?.remove()
+        _b = null
+    }
 }
