@@ -9,26 +9,33 @@ import com.app.vault.marketplace.databinding.ActivityMainBinding
 class MainActivity : AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
 
-    override fun onCreate(s: Bundle?) {
-        super.onCreate(s)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
 
-        if (!SessionManager(this).isLoggedIn()) {
+        if (!FirebaseRepository().isLoggedIn) {
             startActivity(Intent(this, LoginActivity::class.java)); finish(); return
         }
 
-        loadFragment(MarketFragment())
+        if (savedInstanceState == null) {
+            loadFragment(MarketFragment())
+        }
 
         b.bottomNav.setOnItemSelectedListener { item ->
             val f: Fragment = when (item.itemId) {
                 R.id.nav_market -> MarketFragment()
                 R.id.nav_store -> MyStoreFragment()
                 R.id.nav_orders -> OrdersFragment()
+                R.id.nav_profile -> ProfileFragment()
                 else -> MarketFragment()
             }
             loadFragment(f)
             true
+        }
+
+        if (intent.getBooleanExtra("open_orders", false)) {
+            navigateToOrders()
         }
     }
 
@@ -37,6 +44,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadFragment(f: Fragment) {
-        supportFragmentManager.beginTransaction().replace(R.id.fragmentContainer, f).commit()
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, f)
+            .commit()
     }
 }

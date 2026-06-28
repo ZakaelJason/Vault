@@ -1,43 +1,114 @@
-// MarketFragment.kt
 package com.app.vault.marketplace
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import com.app.vault.marketplace.databinding.FragmentMarketBinding
+import com.google.android.material.chip.Chip
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.firestore
 
 class MarketFragment : Fragment() {
     private var _b: FragmentMarketBinding? = null
     private val b get() = _b!!
+    private lateinit var session: SessionManager
+    private val firestoreDb by lazy { Firebase.firestore }
+    private var listenerRegistration: ListenerRegistration? = null
+    private var currentCategory: String = "All"
+    private var currentSearch: String = ""
+    private var allItems: List<FirestoreItem> = emptyList()
 
-    override fun onCreateView(inf: LayoutInflater, c: ViewGroup?, s: Bundle?): View {
-        _b = FragmentMarketBinding.inflate(inf, c, false)
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+        _b = FragmentMarketBinding.inflate(inflater, container, false)
         return b.root
     }
 
-    override fun onViewCreated(v: View, s: Bundle?) {
-        super.onViewCreated(v, s)
-        val session = SessionManager(requireContext())
-        val db = DatabaseHelper(requireContext())
-        val items = db.getMarketItems(session.getUserId())
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        session = SessionManager(requireContext())
 
-        b.rvMarket.layoutManager = LinearLayoutManager(requireContext())
-        b.rvMarket.adapter = ItemAdapter(items) { item ->
+        b.tvWelcome.text = "Hello, ${session.getUsername()}!"
+        b.rvMarket.layoutManager = GridLayoutManager(requireContext(), 2)
+
+        b.etSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                currentSearch = s.toString()
+                applyFilters()
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        b.chipGroupFilter.setOnCheckedChangeListener { group, checkedId ->
+            val chip = group.findViewById<Chip>(checkedId)
+            currentCategory = chip?.text?.toString() ?: "All"
+            applyFilters()
+        }
+
+        startFirestoreListener()
+    }
+
+    private fun startFirestoreListener() {
+        val myUid = FirebaseRepository().currentUser?.uid ?: ""
+
+        listenerRegistration = firestoreDb.collection("products")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (_b == null) return@addSnapshotListener
+                if (error != null || snapshot == null) return@addSnapshotListener
+
+                // Sembunyikan produk milik sendiri, filter berdasarkan sellerUid (stabil & unik)
+                allItems = snapshot.documents.mapNotNull { doc ->
+                    val sellerUid = doc.getString("sellerUid") ?: ""
+                    if (sellerUid == myUid) return@mapNotNull null
+
+                    FirestoreItem(
+                        firestoreDocId = doc.id,
+                        sellerUid   = sellerUid,
+                        sellerName  = doc.getString("sellerName") ?: "",
+                        name        = doc.getString("name") ?: "",
+                        price       = doc.getDouble("price") ?: 0.0,
+                        description = doc.getString("description") ?: "",
+                        imageUrl    = doc.getString("imageUrl") ?: "",
+                        category    = doc.getString("category") ?: "Other",
+                        createdAt   = doc.getLong("createdAt") ?: 0L
+                    )
+                }
+                applyFilters()
+            }
+    }
+
+    private fun applyFilters() {
+        if (_b == null) return
+        val filtered = allItems.filter { item ->
+            val matchSearch   = currentSearch.isBlank() ||
+                    item.name.contains(currentSearch, ignoreCase = true)
+            val matchCategory = currentCategory == "All" ||
+                    item.category.equals(currentCategory, ignoreCase = true)
+            matchSearch && matchCategory
+        }
+
+        // FIX: kirim firestoreDocId ke ItemDetailActivity, bukan localId
+        b.rvMarket.adapter = FirestoreItemAdapter(filtered) { item ->
             Intent(requireContext(), ItemDetailActivity::class.java).also {
-                it.putExtra("item_id", item.id)
+                it.putExtra("firestore_doc_id", item.firestoreDocId)
                 startActivity(it)
             }
         }
-
-        b.ivCallSupport.setOnClickListener {
-            startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:1500123")))
-        }
     }
 
-    override fun onDestroyView() { super.onDestroyView(); _b = null }
+    override fun onDestroyView() {
+        super.onDestroyView()
+        listenerRegistration?.remove()
+        listenerRegistration = null
+        _b = null
+    }
 }

@@ -14,6 +14,7 @@
         android:orientation="vertical"
         android:padding="16dp">
 
+        <!-- Baris atas: nama item + badge status -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -41,6 +42,7 @@
                 android:background="@drawable/status_badge_bg"/>
         </LinearLayout>
 
+        <!-- Role: buyer / seller info -->
         <TextView
             android:id="@+id/tvOrderRole"
             android:layout_width="wrap_content"
@@ -49,14 +51,49 @@
             android:textSize="13sp"
             android:layout_marginTop="6dp"/>
 
-        <Button
-            android:id="@+id/btnAction"
-            style="@style/VaultButton"
+        <!-- Baris tombol: Action + Chat + Delete -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:layout_marginTop="12dp"
-            android:textSize="13sp"
-            android:visibility="gone"/>
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="12dp">
+
+            <!-- Upload/View Proof -->
+            <Button
+                android:id="@+id/btnAction"
+                style="@style/VaultButton"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:textSize="13sp"
+                android:visibility="gone"/>
+
+            <!-- Chat dengan penjual/pembeli — BARU -->
+            <Button
+                android:id="@+id/btnChat"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="8dp"
+                android:minWidth="0dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:text="💬"
+                android:textSize="18sp"
+                android:visibility="visible"/>
+
+            <!-- Hapus transaksi -->
+            <Button
+                android:id="@+id/btnDelete"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:text="Delete"
+                android:textColor="#EF5350"
+                android:textSize="13sp"
+                android:layout_marginStart="4dp"
+                android:visibility="visible"/>
+        </LinearLayout>
 
     </LinearLayout>
 </androidx.cardview.widget.CardView>
