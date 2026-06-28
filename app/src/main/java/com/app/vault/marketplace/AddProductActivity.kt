@@ -2,7 +2,6 @@ package com.app.vault.marketplace
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
@@ -11,6 +10,8 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.app.vault.marketplace.databinding.ActivityAddProductBinding
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.firestore
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
@@ -18,6 +19,7 @@ import java.util.UUID
 class AddProductActivity : AppCompatActivity() {
     private lateinit var b: ActivityAddProductBinding
     private lateinit var db: DatabaseHelper
+    private val firestoreDb by lazy { Firebase.firestore }
     private var editItemId: Int = -1
     private var selectedImageUri: Uri? = null
     private var currentImageUri: String = ""
@@ -62,7 +64,7 @@ class AddProductActivity : AppCompatActivity() {
         b.etDesc.setText(item.description)
         b.etCategory.setText(item.category, false)
         b.btnSubmit.text = "Update Product"
-        
+
         currentImageUri = item.imageUri
         if (currentImageUri.isNotEmpty()) {
             val file = File(currentImageUri)
@@ -74,10 +76,10 @@ class AddProductActivity : AppCompatActivity() {
     }
 
     private fun saveProduct() {
-        val name = b.etName.text.toString().trim()
+        val name     = b.etName.text.toString().trim()
         val priceStr = b.etPrice.text.toString().trim()
-        val desc = b.etDesc.text.toString().trim()
-        val cat = b.etCategory.text.toString().trim()
+        val desc     = b.etDesc.text.toString().trim()
+        val cat      = b.etCategory.text.toString().trim()
 
         if (name.isEmpty() || priceStr.isEmpty() || desc.isEmpty() || cat.isEmpty()) {
             Toast.makeText(this, "Fill all fields", Toast.LENGTH_SHORT).show()
@@ -85,30 +87,56 @@ class AddProductActivity : AppCompatActivity() {
         }
 
         val price = priceStr.toDoubleOrNull() ?: 0.0
-        
-        // Save image to internal storage if new one selected
+
         val finalImageUri = if (selectedImageUri != null) {
             copyImageToInternal(selectedImageUri!!) ?: currentImageUri
         } else {
             currentImageUri
         }
 
-        val session = SessionManager(this)
+        val session    = SessionManager(this)
+        val userId     = session.getUserId()
+        val sellerName = session.getUsername()
+
         if (editItemId != -1) {
-            // In a real app, updateItem should include imageUri. Updating DatabaseHelper next.
-            db.writableDatabase.update(DatabaseHelper.T_ITEMS, android.content.ContentValues().apply {
-                put("name", name); put("price", price); put("description", desc)
-                put("category", cat); put("image_uri", finalImageUri)
-            }, "id=?", arrayOf(editItemId.toString()))
+            // UPDATE mode — update SQLite lokal saja
+            db.writableDatabase.update(
+                DatabaseHelper.T_ITEMS,
+                android.content.ContentValues().apply {
+                    put("name", name); put("price", price); put("description", desc)
+                    put("category", cat); put("image_uri", finalImageUri)
+                },
+                "id=?", arrayOf(editItemId.toString())
+            )
             Toast.makeText(this, "Product updated!", Toast.LENGTH_SHORT).show()
+            finish()
         } else {
-            db.writableDatabase.insert(DatabaseHelper.T_ITEMS, null, android.content.ContentValues().apply {
-                put("seller_id", session.getUserId()); put("name", name); put("price", price)
-                put("description", desc); put("image_uri", finalImageUri); put("category", cat)
-            })
-            Toast.makeText(this, "Item listed!", Toast.LENGTH_SHORT).show()
+            // INSERT mode — simpan ke SQLite dulu, lalu sync ke Firestore
+            val localId = db.addItem(userId, name, price, desc, cat, finalImageUri)
+
+            val product = hashMapOf(
+                "localId"     to localId,
+                "sellerId"    to userId,
+                "sellerName"  to sellerName,
+                "name"        to name,
+                "price"       to price,
+                "description" to desc,
+                "category"    to cat,
+                "imageUri"    to finalImageUri,
+                "createdAt"   to System.currentTimeMillis()
+            )
+
+            firestoreDb.collection("products")
+                .add(product)
+                .addOnSuccessListener {
+                    Toast.makeText(this, "Item listed!", Toast.LENGTH_SHORT).show()
+                    finish()
+                }
+                .addOnFailureListener {
+                    Toast.makeText(this, "Item listed (offline)!", Toast.LENGTH_SHORT).show()
+                    finish()
+                }
         }
-        finish()
     }
 
     private fun copyImageToInternal(uri: Uri): String? {

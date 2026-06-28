@@ -37,7 +37,8 @@ data class Transaction(
     val paymentMethod: String,
     val itemName: String = "",
     val buyerName: String = "",
-    val sellerName: String = ""
+    val sellerName: String = "",
+    val firestoreDocId: String = ""
 )
 
 data class Comment(

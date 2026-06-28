@@ -10,14 +10,18 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.app.vault.marketplace.databinding.ActivityProofUploadBinding
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.firestore
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 
 class ProofUploadActivity : AppCompatActivity() {
     private lateinit var b: ActivityProofUploadBinding
+    private val firestoreDb by lazy { Firebase.firestore }
     private var selectedImageUri: Uri? = null
-    
+    private var firestoreDocId: String = ""
+
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
             selectedImageUri = it
@@ -32,82 +36,109 @@ class ProofUploadActivity : AppCompatActivity() {
         b = ActivityProofUploadBinding.inflate(layoutInflater)
         setContentView(b.root)
 
-        val txnId = intent.getIntExtra("transaction_id", -1)
-        if (txnId == -1) { finish(); return }
+        firestoreDocId = intent.getStringExtra("firestore_doc_id") ?: ""
+        if (firestoreDocId.isEmpty()) { finish(); return }
 
-        val db = DatabaseHelper(this)
         val session = SessionManager(this)
-        val txn = db.getTransaction(txnId)
-
-        if (txn == null) { finish(); return }
-
         b.btnBack.setOnClickListener { finish() }
-        b.tvOrderInfo.text = "Item: ${txn.itemName}\nBuyer: ${txn.buyerName} → Seller: ${txn.sellerName}\nStatus: ${txn.status}"
 
-        val isSeller = txn.sellerId == session.getUserId()
-        val isBuyer = txn.buyerId == session.getUserId()
+        // Baca data transaksi dari Firestore berdasarkan docId
+        firestoreDb.collection("transactions")
+            .document(firestoreDocId)
+            .get()
+            .addOnSuccessListener { doc ->
+                if (!doc.exists()) { finish(); return@addOnSuccessListener }
 
-        // Load image or placeholder
-        if (txn.proofImageUri.isNotEmpty()) {
-            val file = File(txn.proofImageUri)
-            if (file.exists()) {
-                b.ivProof.setImageBitmap(BitmapFactory.decodeFile(file.absolutePath))
-                b.ivProof.visibility = View.VISIBLE
-                b.tvProofPlaceholder.visibility = View.GONE
-            } else {
-                b.ivProof.setImageResource(R.drawable.placeholder_bukti)
-                b.ivProof.visibility = View.VISIBLE
-                b.tvProofPlaceholder.visibility = View.GONE
+                val itemName    = doc.getString("itemName") ?: ""
+                val buyerName   = doc.getString("buyerUsername") ?: ""
+                val sellerName  = doc.getString("sellerUsername") ?: ""
+                val status      = doc.getString("status") ?: "Pending"
+                val proofUri    = doc.getString("proofImageUri") ?: ""
+
+                b.tvOrderInfo.text =
+                    "Item: $itemName\nBuyer: $buyerName → Seller: $sellerName\nStatus: $status"
+
+                // Tampilkan gambar bukti kalau sudah ada
+                if (proofUri.isNotEmpty()) {
+                    val file = File(proofUri)
+                    if (file.exists()) {
+                        b.ivProof.setImageBitmap(BitmapFactory.decodeFile(file.absolutePath))
+                    } else {
+                        b.ivProof.setImageResource(R.drawable.placeholder_bukti)
+                    }
+                    b.ivProof.visibility = View.VISIBLE
+                    b.tvProofPlaceholder.visibility = View.GONE
+                }
+
+                val isSeller = sellerName == session.getUsername()
+                val isBuyer  = buyerName  == session.getUsername()
+
+                when {
+                    isSeller && (status == "Pending" || status == "Proof Uploaded") ->
+                        setupSellerView(status, proofUri)
+                    isBuyer && status == "Proof Uploaded" ->
+                        setupBuyerView()
+                    else -> {
+                        b.btnSelectImage.visibility = View.GONE
+                        b.btnAction.isEnabled = false
+                        b.btnAction.text = "No Action Required"
+                    }
+                }
             }
-        } else if (txn.status != "Pending") {
-            b.ivProof.setImageResource(R.drawable.placeholder_bukti)
-            b.ivProof.visibility = View.VISIBLE
-            b.tvProofPlaceholder.visibility = View.GONE
-        }
-
-        when {
-            isSeller && (txn.status == "Pending" || txn.status == "Proof Uploaded") -> setupSellerUploadView(db, txn)
-            isBuyer && txn.status == "Proof Uploaded" -> setupBuyerProofView(db, txn)
-            else -> {
-                b.btnSelectImage.visibility = View.GONE
-                b.btnAction.isEnabled = false
-                b.btnAction.text = "No Action Required"
-            }
-        }
+            .addOnFailureListener { finish() }
     }
 
-    private fun setupSellerUploadView(db: DatabaseHelper, txn: Transaction) {
-        b.tvTitle.text = if (txn.status == "Pending") "Upload Proof" else "Update Proof"
+    private fun setupSellerView(status: String, existingProof: String) {
+        b.tvTitle.text = if (status == "Pending") "Upload Proof" else "Update Proof"
         b.btnSelectImage.visibility = View.VISIBLE
         b.btnAction.text = "Submit Proof"
-        
+
         b.btnSelectImage.setOnClickListener { pickImage.launch("image/*") }
 
         b.btnAction.setOnClickListener {
             val uri = selectedImageUri
-            if (uri == null && txn.proofImageUri.isEmpty()) { 
+            if (uri == null && existingProof.isEmpty()) {
                 Toast.makeText(this, "Please select a proof image", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener 
+                return@setOnClickListener
             }
-            
-            val finalPath = if (uri != null) copyImageToInternal(uri) else txn.proofImageUri
-            if (finalPath != null) {
-                db.updateTransactionProof(txn.id, finalPath)
-                Toast.makeText(this, "Proof updated successfully!", Toast.LENGTH_SHORT).show()
-                finish()
-            }
+
+            val finalPath = if (uri != null) copyImageToInternal(uri) else existingProof
+
+            // Update status di Firestore
+            firestoreDb.collection("transactions")
+                .document(firestoreDocId)
+                .update(
+                    mapOf(
+                        "status"        to "Proof Uploaded",
+                        "proofImageUri" to (finalPath ?: "")
+                    )
+                )
+                .addOnSuccessListener {
+                    Toast.makeText(this, "Proof uploaded!", Toast.LENGTH_SHORT).show()
+                    finish()
+                }
+                .addOnFailureListener {
+                    Toast.makeText(this, "Gagal upload, coba lagi", Toast.LENGTH_SHORT).show()
+                }
         }
     }
 
-    private fun setupBuyerProofView(db: DatabaseHelper, txn: Transaction) {
+    private fun setupBuyerView() {
         b.tvTitle.text = "Confirm Receipt"
         b.btnSelectImage.visibility = View.GONE
         b.btnAction.text = "Confirm Receipt"
 
         b.btnAction.setOnClickListener {
-            db.completeTransaction(txn.id)
-            Toast.makeText(this, "Transaction completed!", Toast.LENGTH_SHORT).show()
-            finish()
+            firestoreDb.collection("transactions")
+                .document(firestoreDocId)
+                .update("status", "Completed")
+                .addOnSuccessListener {
+                    Toast.makeText(this, "Transaction completed!", Toast.LENGTH_SHORT).show()
+                    finish()
+                }
+                .addOnFailureListener {
+                    Toast.makeText(this, "Gagal konfirmasi, coba lagi", Toast.LENGTH_SHORT).show()
+                }
         }
     }
 
@@ -121,8 +152,6 @@ class ProofUploadActivity : AppCompatActivity() {
             inputStream?.close()
             outputStream.close()
             file.absolutePath
-        } catch (e: Exception) {
-            null
-        }
+        } catch (e: Exception) { null }
     }
 }

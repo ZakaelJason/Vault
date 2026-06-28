@@ -9,9 +9,10 @@ import com.app.vault.marketplace.databinding.ItemOrderBinding
 
 class OrderAdapter(
     private val txns: List<Transaction>,
-    private val currentUserId: Int,
+    private val currentUsername: String,
     private val onAction: (Transaction) -> Unit,
-    private val onDelete: (Transaction) -> Unit
+    private val onDelete: (Transaction) -> Unit,
+    private val onChat:   (Transaction) -> Unit
 ) : RecyclerView.Adapter<OrderAdapter.VH>() {
 
     inner class VH(val b: ItemOrderBinding) : RecyclerView.ViewHolder(b.root)
@@ -23,22 +24,27 @@ class OrderAdapter(
 
     override fun onBindViewHolder(h: VH, pos: Int) {
         val txn = txns[pos]
-        h.b.tvOrderItemName.text = txn.itemName
 
-        h.b.tvOrderStatus.text = txn.status
+        h.b.tvOrderItemName.text = txn.itemName
+        h.b.tvOrderStatus.text   = txn.status
+
         val statusColor = when (txn.status) {
-            "Pending" -> Color.parseColor("#FFB300")
+            "Pending"        -> Color.parseColor("#FFB300")
             "Proof Uploaded" -> Color.parseColor("#29B6F6")
-            "Completed" -> Color.parseColor("#66BB6A")
-            else -> Color.parseColor("#A0A0A0")
+            "Completed"      -> Color.parseColor("#66BB6A")
+            else             -> Color.parseColor("#A0A0A0")
         }
         h.b.tvOrderStatus.setTextColor(statusColor)
 
-        val isSeller = txn.sellerId == currentUserId
-        h.b.tvOrderRole.text = if (isSeller) "Your listing → Buyer: ${txn.buyerName}" else "You bought from: ${txn.sellerName}"
+        val isSeller = txn.sellerName == currentUsername
+        h.b.tvOrderRole.text = if (isSeller)
+            "Your listing → Buyer: ${txn.buyerName}"
+        else
+            "You bought from: ${txn.sellerName}"
 
-        // Action button visibility logic
-        val showAction = (isSeller && txn.status == "Pending") || (!isSeller && txn.status == "Proof Uploaded")
+        // Action button (Upload Proof / View Proof)
+        val showAction = (isSeller && txn.status == "Pending") ||
+                (!isSeller && txn.status == "Proof Uploaded")
         if (showAction) {
             h.b.btnAction.visibility = View.VISIBLE
             h.b.btnAction.text = if (isSeller) "Upload Proof" else "View Proof"
@@ -47,7 +53,14 @@ class OrderAdapter(
             h.b.btnAction.visibility = View.GONE
         }
 
-        // Delete button logic
+        // Tombol Chat — selalu tampil selama transaksi belum completed
+        if (txn.status != "Completed") {
+            h.b.btnChat.visibility = View.VISIBLE
+            h.b.btnChat.setOnClickListener { onChat(txn) }
+        } else {
+            h.b.btnChat.visibility = View.GONE
+        }
+
         h.b.btnDelete.setOnClickListener { onDelete(txn) }
     }
 }
