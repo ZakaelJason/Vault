@@ -2,7 +2,6 @@ package com.app.vault.marketplace
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -12,17 +11,15 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import com.app.vault.marketplace.databinding.FragmentProfileBinding
-import java.io.File
-import java.io.FileOutputStream
-import java.util.UUID
+import com.bumptech.glide.Glide
 
 class ProfileFragment : Fragment() {
     private var _b: FragmentProfileBinding? = null
     private val b get() = _b!!
-    private lateinit var db: DatabaseHelper
     private lateinit var sm: SessionManager
+    private val repo = FirebaseRepository()
     private var selectedAvatarUri: Uri? = null
-    private var currentAvatarPath: String = ""
+    private var currentAvatarUrl: String = ""
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -38,7 +35,6 @@ class ProfileFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        db = DatabaseHelper(requireContext())
         sm = SessionManager(requireContext())
 
         loadUserData()
@@ -60,6 +56,7 @@ class ProfileFragment : Fragment() {
         }
 
         b.btnLogout.setOnClickListener {
+            repo.logout()
             sm.clear()
             startActivity(Intent(requireContext(), LoginActivity::class.java))
             requireActivity().finish()
@@ -67,59 +64,72 @@ class ProfileFragment : Fragment() {
     }
 
     private fun loadUserData() {
-        val user = db.getUser(sm.getUserId())
-        user?.let {
-            b.etUsername.setText(it.username)
-            b.etEmail.setText(it.email)
-            b.etDescription.setText(it.description)
-            currentAvatarPath = it.avatarUri
-            
-            if (currentAvatarPath.isNotEmpty()) {
-                val file = File(currentAvatarPath)
-                if (file.exists()) {
-                    b.ivAvatar.setImageBitmap(BitmapFactory.decodeFile(file.absolutePath))
-                } else {
-                    b.ivAvatar.setImageResource(R.drawable.placeholder_profile)
+        val uid = repo.currentUser?.uid ?: return
+        repo.getUserProfile(
+            uid = uid,
+            onSuccess = { profile ->
+                if (_b != null) {
+                    b.etUsername.setText(profile.username)
+                    b.etEmail.setText(profile.email)
+                    b.etEmail.isEnabled = false // email terikat ke Firebase Auth, tidak diubah di sini
+                    b.etDescription.setText(profile.description)
+                    currentAvatarUrl = profile.avatarUrl
+
+                    if (currentAvatarUrl.isNotEmpty()) {
+                        Glide.with(this).load(currentAvatarUrl)
+                            .placeholder(R.drawable.placeholder_profile)
+                            .into(b.ivAvatar)
+                    } else {
+                        b.ivAvatar.setImageResource(R.drawable.placeholder_profile)
+                    }
                 }
-            } else {
-                b.ivAvatar.setImageResource(R.drawable.placeholder_profile)
+            },
+            onError = {
+                Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             }
-        }
+        )
     }
 
     private fun saveProfile() {
-        val finalAvatarPath = if (selectedAvatarUri != null) {
-            copyImageToInternal(selectedAvatarUri!!) ?: currentAvatarPath
-        } else {
-            currentAvatarPath
-        }
+        val uid = repo.currentUser?.uid ?: return
+        val username = b.etUsername.text.toString().trim()
+        val description = b.etDescription.text.toString().trim()
 
-        val res = db.updateUser(
-            sm.getUserId(),
-            b.etUsername.text.toString(),
-            b.etEmail.text.toString(),
-            b.etDescription.text.toString(),
-            finalAvatarPath
-        )
-        
-        if (res > 0) {
-            Toast.makeText(context, "Profile Updated", Toast.LENGTH_SHORT).show()
+        b.btnSave.isEnabled = false
+
+        if (selectedAvatarUri != null) {
+            repo.uploadImage(
+                uri = selectedAvatarUri!!,
+                folder = "avatars",
+                onSuccess = { url -> persistProfile(uid, username, description, url) },
+                onError = {
+                    b.btnSave.isEnabled = true
+                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                }
+            )
+        } else {
+            persistProfile(uid, username, description, currentAvatarUrl)
         }
     }
 
-    private fun copyImageToInternal(uri: Uri): String? {
-        return try {
-            val inputStream = requireContext().contentResolver.openInputStream(uri)
-            val fileName = "avatar_${UUID.randomUUID()}.jpg"
-            val file = File(requireContext().filesDir, fileName)
-            val outputStream = FileOutputStream(file)
-            inputStream?.copyTo(outputStream)
-            inputStream?.close()
-            outputStream.close()
-            file.absolutePath
-        } catch (e: Exception) {
-            null
-        }
+    private fun persistProfile(uid: String, username: String, description: String, avatarUrl: String) {
+        repo.updateUserProfile(
+            uid = uid, username = username, description = description, avatarUrl = avatarUrl,
+            onSuccess = {
+                if (_b != null) {
+                    b.btnSave.isEnabled = true
+                    currentAvatarUrl = avatarUrl
+                    sm.saveProfile(uid, username)
+                    Toast.makeText(context, "Profile Updated", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onError = { msg ->
+                if (_b != null) {
+                    b.btnSave.isEnabled = true
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
     }
 
     override fun onDestroyView() {

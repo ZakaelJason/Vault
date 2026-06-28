@@ -19,7 +19,6 @@ import com.google.firebase.firestore.firestore
 class MarketFragment : Fragment() {
     private var _b: FragmentMarketBinding? = null
     private val b get() = _b!!
-    private lateinit var db: DatabaseHelper
     private lateinit var session: SessionManager
     private val firestoreDb by lazy { Firebase.firestore }
     private var listenerRegistration: ListenerRegistration? = null
@@ -34,7 +33,6 @@ class MarketFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        db      = DatabaseHelper(requireContext())
         session = SessionManager(requireContext())
 
         b.tvWelcome.text = "Hello, ${session.getUsername()}!"
@@ -59,7 +57,7 @@ class MarketFragment : Fragment() {
     }
 
     private fun startFirestoreListener() {
-        val myUsername = session.getUsername()
+        val myUid = FirebaseRepository().currentUser?.uid ?: ""
 
         listenerRegistration = firestoreDb.collection("products")
             .orderBy("createdAt", Query.Direction.DESCENDING)
@@ -67,20 +65,21 @@ class MarketFragment : Fragment() {
                 if (_b == null) return@addSnapshotListener
                 if (error != null || snapshot == null) return@addSnapshotListener
 
-                // FIX: filter berdasarkan sellerName (username), bukan sellerId integer
+                // Sembunyikan produk milik sendiri, filter berdasarkan sellerUid (stabil & unik)
                 allItems = snapshot.documents.mapNotNull { doc ->
-                    val sellerName = doc.getString("sellerName") ?: ""
-                    // Sembunyikan produk milik sendiri
-                    if (sellerName == myUsername) return@mapNotNull null
+                    val sellerUid = doc.getString("sellerUid") ?: ""
+                    if (sellerUid == myUid) return@mapNotNull null
 
                     FirestoreItem(
                         firestoreDocId = doc.id,
+                        sellerUid   = sellerUid,
+                        sellerName  = doc.getString("sellerName") ?: "",
                         name        = doc.getString("name") ?: "",
                         price       = doc.getDouble("price") ?: 0.0,
                         description = doc.getString("description") ?: "",
-                        imageUri    = doc.getString("imageUri") ?: "",
+                        imageUrl    = doc.getString("imageUrl") ?: "",
                         category    = doc.getString("category") ?: "Other",
-                        sellerName  = sellerName
+                        createdAt   = doc.getLong("createdAt") ?: 0L
                     )
                 }
                 applyFilters()

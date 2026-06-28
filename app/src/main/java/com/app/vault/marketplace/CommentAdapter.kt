@@ -8,8 +8,8 @@ import com.app.vault.marketplace.databinding.ItemCommentBinding
 
 class CommentAdapter(
     private val comments: List<Comment>,
-    private val currentUserId: Int,
-    private val sellerId: Int,
+    private val currentUserUid: String,
+    private val sellerUid: String,
     private val onReplyClick: (Comment) -> Unit
 ) : RecyclerView.Adapter<CommentAdapter.VH>() {
 
@@ -31,7 +31,7 @@ class CommentAdapter(
             holder.b.layoutReply.visibility = View.GONE
         }
 
-        if (currentUserId == sellerId && comment.reply.isNullOrEmpty()) {
+        if (currentUserUid == sellerUid && comment.reply.isNullOrEmpty()) {
             holder.b.btnReply.visibility = View.VISIBLE
             holder.b.btnReply.setOnClickListener { onReplyClick(comment) }
         } else {

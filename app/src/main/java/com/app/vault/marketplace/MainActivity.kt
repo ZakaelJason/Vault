@@ -2,12 +2,9 @@ package com.app.vault.marketplace
 
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import com.app.vault.marketplace.databinding.ActivityMainBinding
-import com.google.firebase.Firebase
-import com.google.firebase.firestore.firestore
 
 class MainActivity : AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
@@ -17,7 +14,7 @@ class MainActivity : AppCompatActivity() {
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
 
-        if (!SessionManager(this).isLoggedIn()) {
+        if (!FirebaseRepository().isLoggedIn) {
             startActivity(Intent(this, LoginActivity::class.java)); finish(); return
         }
 
@@ -37,15 +34,9 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
-        val db = Firebase.firestore
-        db.collection("test")
-            .add(hashMapOf("ping" to "hello", "time" to System.currentTimeMillis()))
-            .addOnSuccessListener {
-                Log.d("Firebase", "Berhasil terhubung! Doc ID: ${it.id}")
-            }
-            .addOnFailureListener {
-                Log.e("Firebase", "Gagal: ${it.message}")
-            }
+        if (intent.getBooleanExtra("open_orders", false)) {
+            navigateToOrders()
+        }
     }
 
     fun navigateToOrders() {
