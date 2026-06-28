@@ -151,4 +151,17 @@ class ProofUploadActivity : AppCompatActivity() {
                 }
         }
     }
+
+    private fun copyImageToInternal(uri: Uri): String? {
+        return try {
+            val inputStream = contentResolver.openInputStream(uri)
+            val fileName = "proof_${UUID.randomUUID()}.jpg"
+            val file = File(filesDir, fileName)
+            val outputStream = FileOutputStream(file)
+            inputStream?.copyTo(outputStream)
+            inputStream?.close()
+            outputStream.close()
+            file.absolutePath
+        } catch (e: Exception) { null }
+    }
 }

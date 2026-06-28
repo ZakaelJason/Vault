@@ -33,9 +33,59 @@ class MyStoreFragment : Fragment() {
         b.rvMyStore.layoutManager = LinearLayoutManager(requireContext())
         startListener()
 
-        b.fabAdd.setOnClickListener {
-            startActivity(Intent(requireContext(), AddProductActivity::class.java))
+        view.findViewById<View>(R.id.btnEdit).setOnClickListener {
+            dialog.dismiss()
+            startActivity(Intent(requireContext(), AddProductActivity::class.java).apply {
+                putExtra("item_id", item.id)
+            })
         }
+
+        view.findViewById<View>(R.id.btnDelete).setOnClickListener {
+            dialog.dismiss()
+            showDeleteConfirmation(item)
+        }
+
+        dialog.setContentView(view)
+        dialog.show()
+    }
+
+    private fun loadFirestoreDocId(localId: Int, callback: (String) -> Unit) {
+        val myUsername = session.getUsername()
+        // FIX: cari di Firestore berdasarkan sellerName + localId — unik per user
+        firestoreDb.collection("products")
+            .whereEqualTo("sellerName", myUsername)
+            .whereEqualTo("localId", localId.toLong())
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val docId = snapshot.documents.firstOrNull()?.id ?: ""
+                callback(docId)
+            }
+            .addOnFailureListener { callback("") }
+    }
+
+    private fun showDeleteConfirmation(item: Item) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Hapus Produk")
+            .setMessage("Hapus '${item.name}'? Tindakan ini tidak bisa dibatalkan.")
+            .setPositiveButton("Hapus") { _, _ ->
+                // 1. Hapus dari SQLite lokal
+                db.deleteItem(item.id)
+
+                // FIX: hapus dari Firestore berdasarkan sellerName + localId (bukan hanya localId)
+                // agar tidak menghapus produk device lain yang kebetulan punya localId sama
+                val myUsername = session.getUsername()
+                firestoreDb.collection("products")
+                    .whereEqualTo("sellerName", myUsername)
+                    .whereEqualTo("localId", item.id.toLong())
+                    .get()
+                    .addOnSuccessListener { snapshot ->
+                        snapshot.documents.forEach { it.reference.delete() }
+                    }
+
+                loadItems()
+            }
+            .setNegativeButton("Batal", null)
+            .show()
     }
 
     private fun startListener() {
