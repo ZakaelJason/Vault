@@ -10,66 +10,47 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.app.vault.marketplace.databinding.ActivityItemDetailBinding
 import com.app.vault.marketplace.databinding.DialogReplyBinding
-import com.google.firebase.Firebase
-import com.google.firebase.firestore.firestore
+import com.bumptech.glide.Glide
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.firebase.firestore.Query
 import java.text.NumberFormat
 import java.util.Locale
 
 class ItemDetailActivity : AppCompatActivity() {
     private lateinit var b: ActivityItemDetailBinding
-    private lateinit var db: DatabaseHelper
     private lateinit var sm: SessionManager
-    private val firestoreDb by lazy { Firebase.firestore }
+    private val repo = FirebaseRepository()
 
-    // FIX: sekarang pakai firestoreDocId, bukan integer itemId
     private var firestoreDocId: String = ""
-
-    // Data produk yang dibaca dari Firestore
     private var currentItem: FirestoreItem? = null
-
-    // itemId lokal — dipakai hanya untuk comments (SQLite lokal)
-    private var localItemId: Int = -1
 
     override fun onCreate(s: Bundle?) {
         super.onCreate(s)
         b = ActivityItemDetailBinding.inflate(layoutInflater)
         setContentView(b.root)
 
-        db = DatabaseHelper(this)
         sm = SessionManager(this)
 
         firestoreDocId = intent.getStringExtra("firestore_doc_id") ?: ""
         if (firestoreDocId.isEmpty()) { finish(); return }
 
         b.toolbar.setNavigationOnClickListener { finish() }
-        loadFromFirestore()
+        loadItem()
     }
 
-    private fun loadFromFirestore() {
-        firestoreDb.collection("products")
-            .document(firestoreDocId)
-            .get()
-            .addOnSuccessListener { doc ->
-                if (!doc.exists()) { finish(); return@addOnSuccessListener }
-
-                val item = FirestoreItem(
-                    firestoreDocId = doc.id,
-                    name        = doc.getString("name") ?: "",
-                    price       = doc.getDouble("price") ?: 0.0,
-                    description = doc.getString("description") ?: "",
-                    imageUri    = doc.getString("imageUri") ?: "",
-                    category    = doc.getString("category") ?: "Other",
-                    sellerName  = doc.getString("sellerName") ?: ""
-                )
+    private fun loadItem() {
+        repo.getProduct(
+            docId = firestoreDocId,
+            onSuccess = { item ->
                 currentItem = item
-                localItemId = (doc.getLong("localId") ?: -1L).toInt()
                 displayItem(item)
-                if (localItemId != -1) loadComments()
-            }
-            .addOnFailureListener {
+                loadComments()
+            },
+            onError = {
                 Toast.makeText(this, "Gagal memuat produk", Toast.LENGTH_SHORT).show()
                 finish()
             }
+        )
     }
 
     private fun displayItem(item: FirestoreItem) {
@@ -80,23 +61,29 @@ class ItemDetailActivity : AppCompatActivity() {
         b.tvDesc.text   = item.description
         b.tvSeller.text = item.sellerName
 
-        // Gambar: path lokal hanya valid di device pemilik — pakai placeholder untuk device lain
-        val resId = when (item.category) {
+        val placeholderRes = when (item.category) {
             "Joki"    -> R.drawable.placeholder_joki
             "Top Up"  -> R.drawable.placeholder_topup
             "Account" -> R.drawable.placeholder_account
             else      -> R.drawable.placeholder_account
         }
-        b.ivItemImage.setImageResource(resId)
+        if (item.imageUrl.isNotEmpty()) {
+            Glide.with(this).load(item.imageUrl)
+                .placeholder(placeholderRes).error(placeholderRes)
+                .into(b.ivItemImage)
+        } else {
+            b.ivItemImage.setImageResource(placeholderRes)
+        }
 
-        val isMine = item.sellerName == sm.getUsername()
+        val myUid = repo.currentUser?.uid ?: ""
+        val isMine = item.sellerUid == myUid
         if (isMine) {
             b.btnBuy.visibility  = View.GONE
             b.btnChat.visibility = View.GONE
             b.layoutAddComment.visibility = View.GONE
         } else {
             b.btnBuy.visibility  = View.VISIBLE
-            b.btnChat.visibility = View.VISIBLE
+            b.btnChat.visibility = View.GONE // tampil hanya jika sudah pernah membeli item ini
             b.btnBuy.setOnClickListener  { showCheckoutDialog(item, fmt) }
             b.btnChat.setOnClickListener {
                 startActivity(Intent(this, ChatActivity::class.java).apply {
@@ -105,6 +92,7 @@ class ItemDetailActivity : AppCompatActivity() {
                     putExtra("item_name",       item.name)
                 })
             }
+            checkChatEligibility(item, myUid)
         }
 
         b.btnShare.setOnClickListener {
@@ -115,6 +103,23 @@ class ItemDetailActivity : AppCompatActivity() {
                     "Cek produk ini di Vault: ${item.name} — ${b.tvPrice.text}")
             }, "Bagikan via"))
         }
+    }
+
+    private fun checkChatEligibility(item: FirestoreItem, myUid: String) {
+        if (myUid.isEmpty()) return
+        // Tombol Chat hanya tampil jika user ini sudah membeli item ini
+        // (ada dokumen transaksi dengan buyerUid = saya dan itemDocId = produk ini).
+        repo.firestore.collection("transactions")
+            .whereEqualTo("buyerUid", myUid)
+            .whereEqualTo("itemDocId", firestoreDocId)
+            .limit(1)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                b.btnChat.visibility = if (!snapshot.isEmpty) View.VISIBLE else View.GONE
+            }
+            .addOnFailureListener {
+                b.btnChat.visibility = View.GONE
+            }
     }
 
     private fun showCheckoutDialog(item: FirestoreItem, fmt: NumberFormat) {
@@ -139,18 +144,21 @@ class ItemDetailActivity : AppCompatActivity() {
             }
             dialog.dismiss()
 
+            val myUid = repo.currentUser?.uid ?: ""
             val txnData = hashMapOf(
-                "itemId"         to localItemId,
+                "itemDocId"      to firestoreDocId,
                 "itemName"       to item.name,
+                "buyerUid"       to myUid,
                 "buyerUsername"  to sm.getUsername(),
+                "sellerUid"      to item.sellerUid,
                 "sellerUsername" to item.sellerName,
                 "paymentMethod"  to paymentMethod,
                 "status"         to "Pending",
-                "proofImageUri"  to "",
+                "proofImageUrl"  to "",
                 "createdAt"      to System.currentTimeMillis()
             )
 
-            firestoreDb.collection("transactions")
+            repo.firestore.collection("transactions")
                 .add(txnData)
                 .addOnSuccessListener {
                     Toast.makeText(this, "Pesanan berhasil!", Toast.LENGTH_LONG).show()
@@ -163,6 +171,57 @@ class ItemDetailActivity : AppCompatActivity() {
                 .addOnFailureListener {
                     Toast.makeText(this, "Gagal membuat pesanan", Toast.LENGTH_SHORT).show()
                 }
+        }
+    }
+
+    private fun showCheckoutDialog(item: FirestoreItem, fmt: NumberFormat) {
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        val view   = layoutInflater.inflate(R.layout.dialog_checkout, null)
+
+        dialog.setContentView(view)
+        dialog.show()
+    }
+
+    private fun loadComments() {
+        repo.firestore.collection("products").document(firestoreDocId)
+            .collection("comments")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null) return@addSnapshotListener
+
+                val comments = snapshot.documents.map { doc ->
+                    Comment(
+                        id = doc.id,
+                        userUid = doc.getString("userUid") ?: "",
+                        userName = doc.getString("userName") ?: "",
+                        text = doc.getString("text") ?: "",
+                        reply = doc.getString("reply"),
+                        timestamp = doc.getLong("timestamp") ?: 0L
+                    )
+                }
+
+                val myUid = repo.currentUser?.uid ?: ""
+                val sellerUid = currentItem?.sellerUid ?: ""
+
+                b.rvComments.layoutManager = LinearLayoutManager(this)
+                b.rvComments.adapter = CommentAdapter(comments, myUid, sellerUid) { comment ->
+                    showReplyDialog(comment.id)
+                }
+            }
+
+        b.btnSendComment.setOnClickListener {
+            val text = b.etComment.text.toString().trim()
+            val myUid = repo.currentUser?.uid ?: ""
+            if (text.isNotEmpty()) {
+                repo.addComment(
+                    productDocId = firestoreDocId,
+                    userUid = myUid,
+                    userName = sm.getUsername(),
+                    text = text,
+                    onSuccess = { b.etComment.setText("") },
+                    onError = { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
+                )
+            }
         }
 
         dialog.setContentView(view)
@@ -201,6 +260,26 @@ class ItemDetailActivity : AppCompatActivity() {
                 if (replyText.isNotEmpty()) {
                     db.addReply(commentId, replyText)
                     loadComments()
+                }
+            }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+
+    private fun showReplyDialog(commentId: String) {
+        val dbinding = DialogReplyBinding.inflate(LayoutInflater.from(this))
+        MaterialAlertDialogBuilder(this)
+            .setView(dbinding.root)
+            .setPositiveButton("Kirim") { _, _ ->
+                val replyText = dbinding.etReply.text.toString().trim()
+                if (replyText.isNotEmpty()) {
+                    repo.addReply(
+                        productDocId = firestoreDocId,
+                        commentId = commentId,
+                        replyText = replyText,
+                        onSuccess = {},
+                        onError = { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
+                    )
                 }
             }
             .setNegativeButton("Batal", null)

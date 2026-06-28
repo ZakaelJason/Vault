@@ -49,7 +49,7 @@ class SplashActivity : AppCompatActivity() {
     private fun showOnboarding() {
         b.layoutInitial.visibility = View.GONE
         b.layoutOnboarding.visibility = View.VISIBLE
-        
+
         b.viewPager.adapter = OnboardingAdapter(pages)
         b.viewPager.isUserInputEnabled = false
 
@@ -90,9 +90,31 @@ class SplashActivity : AppCompatActivity() {
 
     private fun finishSplash() {
         handler.removeCallbacksAndMessages(null)
-        val dest = if (sm.isLoggedIn()) MainActivity::class.java else LoginActivity::class.java
-        startActivity(Intent(this, dest))
-        finish()
+        val repo = FirebaseRepository()
+        val user = repo.currentUser
+
+        if (user == null) {
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+            return
+        }
+
+        // Pastikan cache username lokal sinkron dengan profil Firestore
+        // (misal app baru dibuka kembali, sesi Firebase Auth masih valid).
+        repo.getUserProfile(
+            uid = user.uid,
+            onSuccess = { profile ->
+                sm.saveProfile(profile.uid, profile.username)
+                startActivity(Intent(this, MainActivity::class.java))
+                finish()
+            },
+            onError = {
+                // Profil tidak ditemukan / gagal dimuat — anggap sesi tidak valid
+                repo.logout()
+                startActivity(Intent(this, LoginActivity::class.java))
+                finish()
+            }
+        )
     }
 
     data class OnboardingPage(val title: String, val desc: String, val imageRes: Int)

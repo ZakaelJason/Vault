@@ -6,10 +6,10 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.app.vault.marketplace.databinding.FragmentOrdersBinding
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayout
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.ListenerRegistration
@@ -18,10 +18,10 @@ import com.google.firebase.firestore.firestore
 class OrdersFragment : Fragment() {
     private var _b: FragmentOrdersBinding? = null
     private val b get() = _b!!
-    private lateinit var db: DatabaseHelper
     private lateinit var session: SessionManager
     private val firestoreDb by lazy { Firebase.firestore }
-    private var listenerRegistration: ListenerRegistration? = null
+    private var buyerListener: ListenerRegistration? = null
+    private var sellerListener: ListenerRegistration? = null
 
     private var allTxns: List<Transaction> = emptyList()
     private var currentUsername: String = ""
@@ -33,7 +33,6 @@ class OrdersFragment : Fragment() {
 
     override fun onViewCreated(v: View, s: Bundle?) {
         super.onViewCreated(v, s)
-        db      = DatabaseHelper(requireContext())
         session = SessionManager(requireContext())
         currentUsername = session.getUsername()
 
@@ -55,27 +54,21 @@ class OrdersFragment : Fragment() {
         var buyerTxns:  List<Transaction> = emptyList()
         var sellerTxns: List<Transaction> = emptyList()
 
-        // Listener sebagai buyer
-        firestoreDb.collection("transactions")
+        buyerListener = firestoreDb.collection("transactions")
             .whereEqualTo("buyerUsername", currentUsername)
             .addSnapshotListener { snapshot, _ ->
                 if (_b == null) return@addSnapshotListener
-                buyerTxns = snapshot?.documents?.mapNotNull { doc ->
-                    mapDocToTransaction(doc)
-                } ?: emptyList()
-                allTxns = (buyerTxns + sellerTxns).distinctBy { it.id }
+                buyerTxns = snapshot?.documents?.mapNotNull { mapDocToTransaction(it) } ?: emptyList()
+                allTxns = (buyerTxns + sellerTxns).distinctBy { it.firestoreDocId }
                 filterOrders(b.tabLayout.selectedTabPosition)
             }
 
-        // Listener sebagai seller
-        listenerRegistration = firestoreDb.collection("transactions")
+        sellerListener = firestoreDb.collection("transactions")
             .whereEqualTo("sellerUsername", currentUsername)
             .addSnapshotListener { snapshot, _ ->
                 if (_b == null) return@addSnapshotListener
-                sellerTxns = snapshot?.documents?.mapNotNull { doc ->
-                    mapDocToTransaction(doc)
-                } ?: emptyList()
-                allTxns = (buyerTxns + sellerTxns).distinctBy { it.id }
+                sellerTxns = snapshot?.documents?.mapNotNull { mapDocToTransaction(it) } ?: emptyList()
+                allTxns = (buyerTxns + sellerTxns).distinctBy { it.firestoreDocId }
                 filterOrders(b.tabLayout.selectedTabPosition)
             }
     }
@@ -85,17 +78,17 @@ class OrdersFragment : Fragment() {
     ): Transaction? {
         return try {
             Transaction(
-                id             = doc.id.hashCode(),           // gunakan hash docId sebagai id lokal
-                itemId         = (doc.getLong("itemId") ?: 0L).toInt(),
-                buyerId        = 0,                           // tidak dipakai, pakai username
-                sellerId       = 0,
-                status         = doc.getString("status") ?: "Pending",
-                proofImageUri  = doc.getString("proofImageUri") ?: "",
-                paymentMethod  = doc.getString("paymentMethod") ?: "",
+                firestoreDocId = doc.id,
+                itemDocId      = doc.getString("itemDocId") ?: "",
                 itemName       = doc.getString("itemName") ?: "",
+                buyerUid       = doc.getString("buyerUid") ?: "",
                 buyerName      = doc.getString("buyerUsername") ?: "",
+                sellerUid      = doc.getString("sellerUid") ?: "",
                 sellerName     = doc.getString("sellerUsername") ?: "",
-                firestoreDocId = doc.id                        // simpan docId untuk update
+                status         = doc.getString("status") ?: "Pending",
+                proofImageUrl  = doc.getString("proofImageUrl") ?: "",
+                paymentMethod  = doc.getString("paymentMethod") ?: "",
+                createdAt      = doc.getLong("createdAt") ?: 0L
             )
         } catch (e: Exception) { null }
     }
@@ -119,8 +112,6 @@ class OrdersFragment : Fragment() {
             },
             onDelete = { txn -> showDeleteConfirmation(txn) },
             onChat   = { txn ->
-                val otherUser = if (txn.buyerName == currentUsername)
-                    txn.sellerName else txn.buyerName
                 Intent(requireContext(), ChatActivity::class.java).also {
                     it.putExtra("seller_username", txn.sellerName)
                     it.putExtra("buyer_username",  txn.buyerName)
@@ -132,19 +123,21 @@ class OrdersFragment : Fragment() {
     }
 
     private fun showDeleteConfirmation(txn: Transaction) {
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Hapus Pesanan")
             .setMessage("Hapus pesanan '${txn.itemName}' dari riwayat?")
             .setPositiveButton("Hapus") { _, _ ->
-                // Hapus dari Firestore
-                if (txn.firestoreDocId.isNotEmpty()) {
-                    firestoreDb.collection("transactions")
-                        .document(txn.firestoreDocId)
-                        .delete()
-                }
-                // Hapus dari SQLite lokal juga
-                db.deleteTransaction(txn.itemId)
-                Toast.makeText(requireContext(), "Pesanan dihapus", Toast.LENGTH_SHORT).show()
+                firestoreDb.collection("transactions")
+                    .document(txn.firestoreDocId)
+                    .delete()
+                    .addOnSuccessListener {
+                        if (_b == null) return@addOnSuccessListener
+                        Toast.makeText(requireContext(), "Pesanan dihapus", Toast.LENGTH_SHORT).show()
+                    }
+                    .addOnFailureListener {
+                        if (_b == null) return@addOnFailureListener
+                        Toast.makeText(requireContext(), "Gagal menghapus pesanan", Toast.LENGTH_SHORT).show()
+                    }
             }
             .setNegativeButton("Batal", null)
             .show()
@@ -152,7 +145,8 @@ class OrdersFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        listenerRegistration?.remove()
+        buyerListener?.remove()
+        sellerListener?.remove()
         _b = null
     }
 }

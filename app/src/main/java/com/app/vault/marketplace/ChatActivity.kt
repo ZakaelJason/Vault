@@ -4,8 +4,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
-import android.widget.ImageButton
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -15,12 +13,6 @@ import com.google.firebase.Firebase
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
-
-data class ChatMessage(
-    val text:       String  = "",
-    val senderUsername: String = "",
-    val timestamp:  Long    = 0L
-)
 
 class ChatActivity : AppCompatActivity() {
     private lateinit var b: ActivityChatBinding
@@ -141,7 +133,14 @@ class ChatAdapter(
     override fun onBindViewHolder(h: VH, pos: Int) {
         val msg = messages[pos]
         h.tvMessage.text = msg.text
-        h.tvSender.text  = msg.senderUsername
+        // Untuk pesan diterima, tampilkan nama pengirim (lawan bicara).
+        // Untuk pesan terkirim, sembunyikan label nama (cukup tahu itu "Anda").
+        if (h.itemViewType == VIEW_SENT) {
+            h.tvSender.visibility = View.GONE
+        } else {
+            h.tvSender.visibility = View.VISIBLE
+            h.tvSender.text = msg.senderUsername
+        }
     }
 
     override fun getItemCount() = messages.size

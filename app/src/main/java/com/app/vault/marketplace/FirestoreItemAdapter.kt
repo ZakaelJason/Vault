@@ -4,11 +4,11 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.app.vault.marketplace.databinding.ItemProductBinding
+import com.bumptech.glide.Glide
 import java.text.NumberFormat
 import java.util.Locale
 
-// Adapter khusus untuk menampilkan produk dari Firestore di MarketFragment
-// Pakai layout item_product.xml yang sama dengan ItemAdapter
+// Adapter untuk menampilkan produk dari Firestore, dipakai di MarketFragment & MyStoreFragment
 class FirestoreItemAdapter(
     private val items: List<FirestoreItem>,
     private val onClick: (FirestoreItem) -> Unit
@@ -29,15 +29,22 @@ class FirestoreItemAdapter(
         h.b.tvItemDesc.text  = item.description
         h.b.tvItemPrice.text = "Rp ${fmt.format(item.price)}"
 
-        // Gambar dari Firestore adalah path lokal — tidak bisa diakses device lain
-        // Tampilkan placeholder berdasarkan kategori
-        val resId = when (item.category) {
+        val placeholderRes = when (item.category) {
             "Joki"    -> R.drawable.placeholder_joki
             "Top Up"  -> R.drawable.placeholder_topup
             "Account" -> R.drawable.placeholder_account
             else      -> R.drawable.placeholder_account
         }
-        h.b.ivProduct.setImageResource(resId)
+
+        if (item.imageUrl.isNotEmpty()) {
+            Glide.with(h.b.ivProduct)
+                .load(item.imageUrl)
+                .placeholder(placeholderRes)
+                .error(placeholderRes)
+                .into(h.b.ivProduct)
+        } else {
+            h.b.ivProduct.setImageResource(placeholderRes)
+        }
 
         h.b.root.setOnClickListener { onClick(item) }
     }

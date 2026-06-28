@@ -1,8 +1,5 @@
 package com.app.vault.marketplace
 
-import android.app.Activity
-import android.content.Intent
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -10,15 +7,14 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.app.vault.marketplace.databinding.ActivityProofUploadBinding
+import com.bumptech.glide.Glide
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
-import java.io.File
-import java.io.FileOutputStream
-import java.util.UUID
 
 class ProofUploadActivity : AppCompatActivity() {
     private lateinit var b: ActivityProofUploadBinding
     private val firestoreDb by lazy { Firebase.firestore }
+    private val repo = FirebaseRepository()
     private var selectedImageUri: Uri? = null
     private var firestoreDocId: String = ""
 
@@ -53,19 +49,17 @@ class ProofUploadActivity : AppCompatActivity() {
                 val buyerName   = doc.getString("buyerUsername") ?: ""
                 val sellerName  = doc.getString("sellerUsername") ?: ""
                 val status      = doc.getString("status") ?: "Pending"
-                val proofUri    = doc.getString("proofImageUri") ?: ""
+                val proofUrl    = doc.getString("proofImageUrl") ?: ""
 
                 b.tvOrderInfo.text =
                     "Item: $itemName\nBuyer: $buyerName → Seller: $sellerName\nStatus: $status"
 
-                // Tampilkan gambar bukti kalau sudah ada
-                if (proofUri.isNotEmpty()) {
-                    val file = File(proofUri)
-                    if (file.exists()) {
-                        b.ivProof.setImageBitmap(BitmapFactory.decodeFile(file.absolutePath))
-                    } else {
-                        b.ivProof.setImageResource(R.drawable.placeholder_bukti)
-                    }
+                // Tampilkan gambar bukti kalau sudah ada (URL Firebase Storage, bisa diakses dari device manapun)
+                if (proofUrl.isNotEmpty()) {
+                    Glide.with(this).load(proofUrl)
+                        .placeholder(R.drawable.placeholder_bukti)
+                        .error(R.drawable.placeholder_bukti)
+                        .into(b.ivProof)
                     b.ivProof.visibility = View.VISIBLE
                     b.tvProofPlaceholder.visibility = View.GONE
                 }
@@ -75,7 +69,7 @@ class ProofUploadActivity : AppCompatActivity() {
 
                 when {
                     isSeller && (status == "Pending" || status == "Proof Uploaded") ->
-                        setupSellerView(status, proofUri)
+                        setupSellerView(status, proofUrl)
                     isBuyer && status == "Proof Uploaded" ->
                         setupBuyerView()
                     else -> {
@@ -88,7 +82,7 @@ class ProofUploadActivity : AppCompatActivity() {
             .addOnFailureListener { finish() }
     }
 
-    private fun setupSellerView(status: String, existingProof: String) {
+    private fun setupSellerView(status: String, existingProofUrl: String) {
         b.tvTitle.text = if (status == "Pending") "Upload Proof" else "Update Proof"
         b.btnSelectImage.visibility = View.VISIBLE
         b.btnAction.text = "Submit Proof"
@@ -97,30 +91,46 @@ class ProofUploadActivity : AppCompatActivity() {
 
         b.btnAction.setOnClickListener {
             val uri = selectedImageUri
-            if (uri == null && existingProof.isEmpty()) {
+            if (uri == null && existingProofUrl.isEmpty()) {
                 Toast.makeText(this, "Please select a proof image", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            val finalPath = if (uri != null) copyImageToInternal(uri) else existingProof
+            b.btnAction.isEnabled = false
 
-            // Update status di Firestore
-            firestoreDb.collection("transactions")
-                .document(firestoreDocId)
-                .update(
-                    mapOf(
-                        "status"        to "Proof Uploaded",
-                        "proofImageUri" to (finalPath ?: "")
-                    )
+            if (uri != null) {
+                repo.uploadImage(
+                    uri = uri,
+                    folder = "proofs",
+                    onSuccess = { url -> submitProof(url) },
+                    onError = {
+                        b.btnAction.isEnabled = true
+                        Toast.makeText(this, it, Toast.LENGTH_SHORT).show()
+                    }
                 )
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Proof uploaded!", Toast.LENGTH_SHORT).show()
-                    finish()
-                }
-                .addOnFailureListener {
-                    Toast.makeText(this, "Gagal upload, coba lagi", Toast.LENGTH_SHORT).show()
-                }
+            } else {
+                submitProof(existingProofUrl)
+            }
         }
+    }
+
+    private fun submitProof(proofUrl: String) {
+        firestoreDb.collection("transactions")
+            .document(firestoreDocId)
+            .update(
+                mapOf(
+                    "status"        to "Proof Uploaded",
+                    "proofImageUrl" to proofUrl
+                )
+            )
+            .addOnSuccessListener {
+                Toast.makeText(this, "Proof uploaded!", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+            .addOnFailureListener {
+                b.btnAction.isEnabled = true
+                Toast.makeText(this, "Gagal upload, coba lagi", Toast.LENGTH_SHORT).show()
+            }
     }
 
     private fun setupBuyerView() {
