@@ -69,17 +69,20 @@
                 android:visibility="gone"/>
 
             <!-- Chat dengan penjual/pembeli — BARU -->
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnChat"
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
                 android:layout_marginStart="8dp"
-                android:minWidth="0dp"
-                android:paddingStart="0dp"
-                android:paddingEnd="0dp"
-                android:text="💬"
-                android:textSize="18sp"
+                android:insetLeft="0dp"
+                android:insetTop="0dp"
+                android:insetRight="0dp"
+                android:insetBottom="0dp"
+                app:icon="@drawable/ic_chat"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
+                app:iconTint="@color/accent"
                 android:visibility="visible"/>
 
             <!-- Hapus transaksi -->
