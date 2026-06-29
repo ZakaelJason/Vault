@@ -27,6 +27,14 @@ class LoginActivity : AppCompatActivity() {
                 username = u, password = p,
                 onSuccess = { profile ->
                     session.saveProfile(profile.uid, profile.username)
+
+                    // Daftarkan FCM token device ini ke profil user
+                    com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                        .addOnSuccessListener { token ->
+                            repo.firestore.collection("users").document(profile.uid)
+                                .set(mapOf("fcmToken" to token), com.google.firebase.firestore.SetOptions.merge())
+                        }
+
                     startActivity(Intent(this, MainActivity::class.java))
                     finish()
                 },

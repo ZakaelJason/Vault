@@ -6,12 +6,13 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.app.vault.marketplace.databinding.ActivityItemDetailBinding
-import com.app.vault.marketplace.databinding.DialogReplyBinding
 import com.bumptech.glide.Glide
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.firebase.firestore.Query
+import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -106,8 +107,6 @@ class ItemDetailActivity : AppCompatActivity() {
 
     private fun checkChatEligibility(item: FirestoreItem, myUid: String) {
         if (myUid.isEmpty()) return
-        // Tombol Chat hanya tampil jika user ini sudah membeli item ini
-        // (ada dokumen transaksi dengan buyerUid = saya dan itemDocId = produk ini).
         repo.firestore.collection("transactions")
             .whereEqualTo("buyerUid", myUid)
             .whereEqualTo("itemDocId", firestoreDocId)
@@ -161,6 +160,10 @@ class ItemDetailActivity : AppCompatActivity() {
                 .add(txnData)
                 .addOnSuccessListener {
                     Toast.makeText(this, "Pesanan berhasil!", Toast.LENGTH_LONG).show()
+
+                    // Kirim notifikasi push ke seller (Task 3.6)
+                    notifySellerNewOrder(item)
+
                     startActivity(Intent(this, MainActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                         putExtra("open_orders", true)
@@ -174,6 +177,21 @@ class ItemDetailActivity : AppCompatActivity() {
 
         dialog.setContentView(view)
         dialog.show()
+    }
+
+    private fun notifySellerNewOrder(item: FirestoreItem) {
+        repo.firestore.collection("users").document(item.sellerUid).get()
+            .addOnSuccessListener { doc ->
+                val token = doc.getString("fcmToken") ?: return@addOnSuccessListener
+                lifecycleScope.launch {
+                    FcmSender.sendToToken(
+                        context = this@ItemDetailActivity,
+                        targetToken = token,
+                        title = "Orderan baru!",
+                        body = "${sm.getUsername()} memesan \"${item.name}\""
+                    )
+                }
+            }
     }
 
     private fun loadComments() {
@@ -220,17 +238,23 @@ class ItemDetailActivity : AppCompatActivity() {
     }
 
     private fun showReplyDialog(commentId: String) {
-        val dbinding = DialogReplyBinding.inflate(LayoutInflater.from(this))
+        // Gunakan manual inflation untuk menghindari error DialogReplyBinding
+        val view = layoutInflater.inflate(R.layout.dialog_reply, null)
+        val etReply = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etReply)
+
         MaterialAlertDialogBuilder(this)
-            .setView(dbinding.root)
+            .setTitle("Balas Komentar")
+            .setView(view)
             .setPositiveButton("Kirim") { _, _ ->
-                val replyText = dbinding.etReply.text.toString().trim()
+                val replyText = etReply?.text.toString().trim()
                 if (replyText.isNotEmpty()) {
                     repo.addReply(
                         productDocId = firestoreDocId,
                         commentId = commentId,
                         replyText = replyText,
-                        onSuccess = {},
+                        onSuccess = {
+                            Toast.makeText(this, "Balasan terkirim", Toast.LENGTH_SHORT).show()
+                        },
                         onError = { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
                     )
                 }

@@ -6,10 +6,12 @@ import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.app.vault.marketplace.databinding.ActivityProofUploadBinding
 import com.bumptech.glide.Glide
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
+import kotlinx.coroutines.launch
 
 class ProofUploadActivity : AppCompatActivity() {
     private lateinit var b: ActivityProofUploadBinding
@@ -125,11 +127,33 @@ class ProofUploadActivity : AppCompatActivity() {
             )
             .addOnSuccessListener {
                 Toast.makeText(this, "Proof uploaded!", Toast.LENGTH_SHORT).show()
+                notifyBuyerProofUploaded()
                 finish()
             }
             .addOnFailureListener {
                 b.btnAction.isEnabled = true
                 Toast.makeText(this, "Gagal upload, coba lagi", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    private fun notifyBuyerProofUploaded() {
+        firestoreDb.collection("transactions").document(firestoreDocId).get()
+            .addOnSuccessListener { doc ->
+                val buyerUid  = doc.getString("buyerUid") ?: return@addOnSuccessListener
+                val itemName  = doc.getString("itemName") ?: "produk"
+
+                firestoreDb.collection("users").document(buyerUid).get()
+                    .addOnSuccessListener { userDoc ->
+                        val token = userDoc.getString("fcmToken") ?: return@addOnSuccessListener
+                        lifecycleScope.launch {
+                            FcmSender.sendToToken(
+                                context = this@ProofUploadActivity,
+                                targetToken = token,
+                                title = "Bukti pembayaran diupload",
+                                body = "Seller sudah upload bukti transfer untuk \"$itemName\". Yuk dicek!"
+                            )
+                        }
+                    }
             }
     }
 
