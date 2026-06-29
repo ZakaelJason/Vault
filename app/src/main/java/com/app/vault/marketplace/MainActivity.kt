@@ -1,6 +1,7 @@
 package com.app.vault.marketplace
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
@@ -13,6 +14,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
+
+        NotificationHelper.createChannels(this)
+        requestNotificationPermission()
 
         if (!FirebaseRepository().isLoggedIn) {
             startActivity(Intent(this, LoginActivity::class.java)); finish(); return
@@ -36,6 +40,15 @@ class MainActivity : AppCompatActivity() {
 
         if (intent.getBooleanExtra("open_orders", false)) {
             navigateToOrders()
+        }
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1001)
+            }
         }
     }
 
