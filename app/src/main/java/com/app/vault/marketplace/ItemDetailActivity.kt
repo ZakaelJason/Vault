@@ -83,11 +83,13 @@ class ItemDetailActivity : AppCompatActivity() {
             b.layoutAddComment.visibility = View.GONE
         } else {
             b.btnBuy.visibility  = View.VISIBLE
-            b.btnChat.visibility = View.GONE // tampil hanya jika sudah pernah membeli item ini
+            b.btnChat.visibility = View.GONE
             b.btnBuy.setOnClickListener  { showCheckoutDialog(item, fmt) }
             b.btnChat.setOnClickListener {
                 startActivity(Intent(this, ChatActivity::class.java).apply {
+                    putExtra("seller_uid",      item.sellerUid)
                     putExtra("seller_username", item.sellerName)
+                    putExtra("buyer_uid",       sm.getUid())
                     putExtra("buyer_username",  sm.getUsername())
                     putExtra("item_name",       item.name)
                 })
@@ -161,7 +163,6 @@ class ItemDetailActivity : AppCompatActivity() {
                 .addOnSuccessListener {
                     Toast.makeText(this, "Pesanan berhasil!", Toast.LENGTH_LONG).show()
 
-                    // Kirim notifikasi push ke seller (Task 3.6)
                     notifySellerNewOrder(item)
 
                     startActivity(Intent(this, MainActivity::class.java).apply {
@@ -188,7 +189,8 @@ class ItemDetailActivity : AppCompatActivity() {
                         context = this@ItemDetailActivity,
                         targetToken = token,
                         title = "Orderan baru!",
-                        body = "${sm.getUsername()} memesan \"${item.name}\""
+                        body = "${sm.getUsername()} memesan \"${item.name}\"",
+                        type = "order"
                     )
                 }
             }

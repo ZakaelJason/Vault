@@ -3,9 +3,15 @@ package com.app.vault.marketplace
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import com.app.vault.marketplace.databinding.ActivityMainBinding
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
+import com.google.firebase.firestore.firestore
+import com.google.firebase.messaging.messaging
 
 class MainActivity : AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
@@ -18,8 +24,17 @@ class MainActivity : AppCompatActivity() {
         NotificationHelper.createChannels(this)
         requestNotificationPermission()
 
-        if (!FirebaseRepository().isLoggedIn) {
+        val currentUser = Firebase.auth.currentUser
+        if (currentUser == null) {
             startActivity(Intent(this, LoginActivity::class.java)); finish(); return
+        } else {
+            val session = SessionManager(this)
+            if (session.getUid().isEmpty()) {
+                FirebaseRepository().getUserProfile(currentUser.uid, { profile ->
+                    session.saveProfile(profile.uid, profile.username)
+                }, { })
+            }
+            updateFcmToken(currentUser.uid)
         }
 
         if (savedInstanceState == null) {
@@ -40,6 +55,21 @@ class MainActivity : AppCompatActivity() {
 
         if (intent.getBooleanExtra("open_orders", false)) {
             navigateToOrders()
+        }
+    }
+
+    private fun updateFcmToken(uid: String) {
+        Firebase.messaging.token.addOnSuccessListener { token ->
+            Log.d("VaultFCM", "Token Device: $token")
+            Firebase.firestore.collection("users").document(uid)
+                .update("fcmToken", token)
+                .addOnSuccessListener {
+                    Log.d("VaultFCM", "FCM Token updated successfully")
+                }
+                .addOnFailureListener {
+                    Firebase.firestore.collection("users").document(uid)
+                        .set(mapOf("fcmToken" to token), com.google.firebase.firestore.SetOptions.merge())
+                }
         }
     }
 

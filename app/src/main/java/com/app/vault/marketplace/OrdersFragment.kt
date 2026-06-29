@@ -114,7 +114,9 @@ class OrdersFragment : Fragment() {
             onDelete = { txn -> showDeleteConfirmation(txn) },
             onChat   = { txn ->
                 Intent(requireContext(), ChatActivity::class.java).also {
+                    it.putExtra("seller_uid",      txn.sellerUid)
                     it.putExtra("seller_username", txn.sellerName)
+                    it.putExtra("buyer_uid",       txn.buyerUid)
                     it.putExtra("buyer_username",  txn.buyerName)
                     it.putExtra("item_name",       txn.itemName)
                     startActivity(it)
