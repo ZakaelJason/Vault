@@ -1,5 +1,6 @@
 package com.app.vault.marketplace
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -7,12 +8,14 @@ import com.app.vault.marketplace.databinding.ActivityRegisterBinding
 
 class RegisterActivity : AppCompatActivity() {
     private lateinit var b: ActivityRegisterBinding
+    private lateinit var session: SessionManager
     private val repo = FirebaseRepository()
 
     override fun onCreate(s: Bundle?) {
         super.onCreate(s)
         b = ActivityRegisterBinding.inflate(layoutInflater)
         setContentView(b.root)
+        session = SessionManager(this)
 
         b.btnRegister.setOnClickListener {
             val e = b.etEmail.text.toString().trim()
@@ -29,7 +32,19 @@ class RegisterActivity : AppCompatActivity() {
             repo.register(
                 email = e, username = u, password = p,
                 onSuccess = {
-                    toast("Account created!")
+                    val uid = repo.auth.currentUser?.uid
+                    if (uid != null) {
+                        session.saveProfile(uid, u)
+
+                        // Daftarkan FCM token device ini ke profil user
+                        com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                            .addOnSuccessListener { token ->
+                                repo.firestore.collection("users").document(uid)
+                                    .set(mapOf("fcmToken" to token), com.google.firebase.firestore.SetOptions.merge())
+                            }
+                    }
+
+                    startActivity(Intent(this, MainActivity::class.java))
                     finish()
                 },
                 onError = { msg ->

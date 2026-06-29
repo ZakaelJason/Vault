@@ -7,10 +7,11 @@ import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.RecyclerView
 import com.app.vault.marketplace.databinding.ActivitySplashBinding
-import com.app.vault.marketplace.databinding.ItemOnboardingBinding
 
 class SplashActivity : AppCompatActivity() {
     private lateinit var b: ActivitySplashBinding
@@ -53,10 +54,13 @@ class SplashActivity : AppCompatActivity() {
         b.viewPager.adapter = OnboardingAdapter(pages)
         b.viewPager.isUserInputEnabled = false
 
-        val touchListener = View.OnTouchListener { _, event ->
+        val touchListener = View.OnTouchListener { v, event ->
             when (event.action) {
                 android.view.MotionEvent.ACTION_DOWN -> isPaused = true
-                android.view.MotionEvent.ACTION_UP -> isPaused = false
+                android.view.MotionEvent.ACTION_UP -> {
+                    isPaused = false
+                    v.performClick()
+                }
             }
             true
         }
@@ -99,17 +103,22 @@ class SplashActivity : AppCompatActivity() {
             return
         }
 
-        // Pastikan cache username lokal sinkron dengan profil Firestore
-        // (misal app baru dibuka kembali, sesi Firebase Auth masih valid).
         repo.getUserProfile(
             uid = user.uid,
             onSuccess = { profile ->
                 sm.saveProfile(profile.uid, profile.username)
+
+                // Daftarkan FCM token device ini ke profil user
+                com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                    .addOnSuccessListener { token ->
+                        repo.firestore.collection("users").document(profile.uid)
+                            .set(mapOf("fcmToken" to token), com.google.firebase.firestore.SetOptions.merge())
+                    }
+
                 startActivity(Intent(this, MainActivity::class.java))
                 finish()
             },
             onError = {
-                // Profil tidak ditemukan / gagal dimuat — anggap sesi tidak valid
                 repo.logout()
                 startActivity(Intent(this, LoginActivity::class.java))
                 finish()
@@ -120,13 +129,20 @@ class SplashActivity : AppCompatActivity() {
     data class OnboardingPage(val title: String, val desc: String, val imageRes: Int)
 
     inner class OnboardingAdapter(private val items: List<OnboardingPage>) : RecyclerView.Adapter<OnboardingAdapter.VH>() {
-        inner class VH(val b: ItemOnboardingBinding) : RecyclerView.ViewHolder(b.root)
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = VH(ItemOnboardingBinding.inflate(LayoutInflater.from(parent.context), parent, false))
+        inner class VH(view: View) : RecyclerView.ViewHolder(view) {
+            val tvTitle: TextView = view.findViewById(R.id.tvTitle)
+            val tvDesc: TextView = view.findViewById(R.id.tvDesc)
+            val ivImage: ImageView = view.findViewById(R.id.ivImage)
+        }
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+            val v = LayoutInflater.from(parent.context).inflate(R.layout.item_onboarding, parent, false)
+            return VH(v)
+        }
         override fun onBindViewHolder(holder: VH, position: Int) {
             val item = items[position]
-            holder.b.tvTitle.text = item.title
-            holder.b.tvDesc.text = item.desc
-            holder.b.ivImage.setImageResource(item.imageRes)
+            holder.tvTitle.text = item.title
+            holder.tvDesc.text = item.desc
+            holder.ivImage.setImageResource(item.imageRes)
         }
         override fun getItemCount() = items.size
     }

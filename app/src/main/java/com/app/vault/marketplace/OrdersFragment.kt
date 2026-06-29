@@ -24,6 +24,7 @@ class OrdersFragment : Fragment() {
     private var sellerListener: ListenerRegistration? = null
 
     private var allTxns: List<Transaction> = emptyList()
+    private var currentUid: String = ""
     private var currentUsername: String = ""
 
     override fun onCreateView(inf: LayoutInflater, c: ViewGroup?, s: Bundle?): View {
@@ -34,6 +35,7 @@ class OrdersFragment : Fragment() {
     override fun onViewCreated(v: View, s: Bundle?) {
         super.onViewCreated(v, s)
         session = SessionManager(requireContext())
+        currentUid = session.getUid()
         currentUsername = session.getUsername()
 
         b.rvOrders.layoutManager = LinearLayoutManager(requireContext())
@@ -48,14 +50,13 @@ class OrdersFragment : Fragment() {
     }
 
     private fun startFirestoreListener() {
-        // Dengarkan transaksi di mana user ini adalah buyer ATAU seller
-        // Firestore tidak support OR query pada field berbeda, jadi kita buat dua listener
-        // dan merge hasilnya
+        if (currentUid.isEmpty()) return
+
         var buyerTxns:  List<Transaction> = emptyList()
         var sellerTxns: List<Transaction> = emptyList()
 
         buyerListener = firestoreDb.collection("transactions")
-            .whereEqualTo("buyerUsername", currentUsername)
+            .whereEqualTo("buyerUid", currentUid)
             .addSnapshotListener { snapshot, _ ->
                 if (_b == null) return@addSnapshotListener
                 buyerTxns = snapshot?.documents?.mapNotNull { mapDocToTransaction(it) } ?: emptyList()
@@ -64,7 +65,7 @@ class OrdersFragment : Fragment() {
             }
 
         sellerListener = firestoreDb.collection("transactions")
-            .whereEqualTo("sellerUsername", currentUsername)
+            .whereEqualTo("sellerUid", currentUid)
             .addSnapshotListener { snapshot, _ ->
                 if (_b == null) return@addSnapshotListener
                 sellerTxns = snapshot?.documents?.mapNotNull { mapDocToTransaction(it) } ?: emptyList()
@@ -96,9 +97,9 @@ class OrdersFragment : Fragment() {
     private fun filterOrders(position: Int) {
         if (_b == null) return
         val filtered = if (position == 0) {
-            allTxns.filter { it.buyerName == currentUsername }
+            allTxns.filter { it.buyerUid == currentUid }
         } else {
-            allTxns.filter { it.sellerName == currentUsername }
+            allTxns.filter { it.sellerUid == currentUid }
         }
 
         b.rvOrders.adapter = OrderAdapter(
