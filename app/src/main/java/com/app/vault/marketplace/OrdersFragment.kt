@@ -123,21 +123,36 @@ class OrdersFragment : Fragment() {
     }
 
     private fun showDeleteConfirmation(txn: Transaction) {
+        val isCancellable = txn.status == "Pending"
+        val title = if (isCancellable) "Batalkan Pesanan" else "Hapus dari Riwayat"
+        val message = if (isCancellable)
+            "Batalkan pesanan '${txn.itemName}'? Status akan ditandai gagal."
+        else
+            "Hapus pesanan '${txn.itemName}' dari riwayat?"
+
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Hapus Pesanan")
-            .setMessage("Hapus pesanan '${txn.itemName}' dari riwayat?")
-            .setPositiveButton("Hapus") { _, _ ->
-                firestoreDb.collection("transactions")
-                    .document(txn.firestoreDocId)
-                    .delete()
-                    .addOnSuccessListener {
-                        if (_b == null) return@addOnSuccessListener
-                        Toast.makeText(requireContext(), "Pesanan dihapus", Toast.LENGTH_SHORT).show()
-                    }
-                    .addOnFailureListener {
-                        if (_b == null) return@addOnFailureListener
-                        Toast.makeText(requireContext(), "Gagal menghapus pesanan", Toast.LENGTH_SHORT).show()
-                    }
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton(if (isCancellable) "Batalkan" else "Hapus") { _, _ ->
+                if (isCancellable) {
+                    // Tandai gagal dulu, supaya listener notifikasi sempat mendeteksi
+                    firestoreDb.collection("transactions")
+                        .document(txn.firestoreDocId)
+                        .update("status", "Cancelled")
+                        .addOnFailureListener {
+                            if (_b != null) Toast.makeText(requireContext(), "Gagal membatalkan", Toast.LENGTH_SHORT).show()
+                        }
+                } else {
+                    firestoreDb.collection("transactions")
+                        .document(txn.firestoreDocId)
+                        .delete()
+                        .addOnSuccessListener {
+                            if (_b != null) Toast.makeText(requireContext(), "Pesanan dihapus", Toast.LENGTH_SHORT).show()
+                        }
+                        .addOnFailureListener {
+                            if (_b != null) Toast.makeText(requireContext(), "Gagal menghapus pesanan", Toast.LENGTH_SHORT).show()
+                        }
+                }
             }
             .setNegativeButton("Batal", null)
             .show()

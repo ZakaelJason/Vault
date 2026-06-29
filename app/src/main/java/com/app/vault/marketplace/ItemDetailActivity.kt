@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.app.vault.marketplace.databinding.ActivityItemDetailBinding
@@ -172,11 +171,6 @@ class ItemDetailActivity : AppCompatActivity() {
                     Toast.makeText(this, "Gagal membuat pesanan", Toast.LENGTH_SHORT).show()
                 }
         }
-    }
-
-    private fun showCheckoutDialog(item: FirestoreItem, fmt: NumberFormat) {
-        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
-        val view   = layoutInflater.inflate(R.layout.dialog_checkout, null)
 
         dialog.setContentView(view)
         dialog.show()
@@ -223,47 +217,6 @@ class ItemDetailActivity : AppCompatActivity() {
                 )
             }
         }
-
-        dialog.setContentView(view)
-        dialog.show()
-    }
-
-    private fun loadComments() {
-        if (localItemId == -1) return
-        val comments = db.getComments(localItemId)
-        b.rvComments.layoutManager = LinearLayoutManager(this)
-        b.rvComments.adapter = CommentAdapter(
-            comments, sm.getUserId(),
-            currentItem?.let {
-                // sellerId lokal tidak diketahui dari Firestore, pakai -1
-                // CommentAdapter hanya butuh ini untuk tampilkan reply button ke seller
-                if (it.sellerName == sm.getUsername()) sm.getUserId() else -1
-            } ?: -1
-        ) { comment -> showReplyDialog(comment.id) }
-
-        b.btnSendComment.setOnClickListener {
-            val text = b.etComment.text.toString().trim()
-            if (text.isNotEmpty() && localItemId != -1) {
-                db.addComment(localItemId, sm.getUserId(), text)
-                b.etComment.setText("")
-                loadComments()
-            }
-        }
-    }
-
-    private fun showReplyDialog(commentId: Int) {
-        val dbinding = DialogReplyBinding.inflate(LayoutInflater.from(this))
-        AlertDialog.Builder(this)
-            .setView(dbinding.root)
-            .setPositiveButton("Kirim") { _, _ ->
-                val replyText = dbinding.etReply.text.toString().trim()
-                if (replyText.isNotEmpty()) {
-                    db.addReply(commentId, replyText)
-                    loadComments()
-                }
-            }
-            .setNegativeButton("Batal", null)
-            .show()
     }
 
     private fun showReplyDialog(commentId: String) {
