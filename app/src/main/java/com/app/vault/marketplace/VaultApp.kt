@@ -11,6 +11,10 @@ import androidx.core.app.ActivityCompat
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
+import com.cloudinary.android.MediaManager
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
 
 class VaultApp : Application() {
 
@@ -23,6 +27,24 @@ class VaultApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        
+        // Initialize Cloudinary from raw JSON
+        try {
+            val inputStream = resources.openRawResource(R.raw.cloudinary_credentials)
+            val reader = BufferedReader(InputStreamReader(inputStream))
+            val jsonString = reader.use { it.readText() }
+            val jsonObject = JSONObject(jsonString)
+
+            val config = hashMapOf(
+                "cloud_name" to jsonObject.getString("cloud_name"),
+                "api_key" to jsonObject.getString("api_key"),
+                "api_secret" to jsonObject.getString("api_secret")
+            )
+            MediaManager.init(this, config)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        
         NotificationHelper.createChannels(this)
         registerNetworkCallback()
         listenTransactionStatusChanges()

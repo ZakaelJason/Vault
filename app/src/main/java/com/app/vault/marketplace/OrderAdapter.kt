@@ -61,6 +61,12 @@ class OrderAdapter(
             h.b.btnChat.visibility = View.GONE
         }
 
-        h.b.btnDelete.setOnClickListener { onDelete(txn) }
+        // Hapus fungsional delete ketika status "Proof Uploaded" (sedang aktif)
+        if (txn.status == "Proof Uploaded") {
+            h.b.btnDelete.visibility = View.GONE
+        } else {
+            h.b.btnDelete.visibility = View.VISIBLE
+            h.b.btnDelete.setOnClickListener { onDelete(txn) }
+        }
     }
 }

@@ -7,6 +7,9 @@ import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
 import com.google.firebase.storage.storage
 import java.util.UUID
+import com.cloudinary.android.MediaManager
+import com.cloudinary.android.callback.ErrorInfo
+import com.cloudinary.android.callback.UploadCallback
 
 /**
  * Pusat akses ke Firebase Auth, Firestore, dan Storage.
@@ -132,22 +135,33 @@ class FirebaseRepository {
             .addOnFailureListener { onError(it.message ?: "Gagal menyimpan profil") }
     }
 
-    /** Upload gambar (produk/avatar) ke Firebase Storage, mengembalikan download URL via callback. */
+    /** Upload gambar (produk/avatar) ke Cloudinary, mengembalikan download URL via callback. */
     fun uploadImage(
         uri: Uri,
         folder: String,
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        val fileName = "${folder}/${UUID.randomUUID()}.jpg"
-        val ref = storage.reference.child(fileName)
-        ref.putFile(uri)
-            .addOnSuccessListener {
-                ref.downloadUrl
-                    .addOnSuccessListener { url -> onSuccess(url.toString()) }
-                    .addOnFailureListener { onError(it.message ?: "Gagal mengambil URL gambar") }
-            }
-            .addOnFailureListener { onError(it.message ?: "Gagal mengunggah gambar") }
+        val fileName = "${folder}/${UUID.randomUUID()}"
+        MediaManager.get().upload(uri)
+            .option("public_id", fileName)
+            .callback(object : UploadCallback {
+                override fun onStart(requestId: String) {}
+                override fun onProgress(requestId: String, bytes: Long, totalBytes: Long) {}
+                override fun onSuccess(requestId: String, resultData: Map<*, *>) {
+                    val url = resultData["secure_url"] as? String
+                    if (url != null) {
+                        onSuccess(url)
+                    } else {
+                        onError("Gagal mengambil URL gambar")
+                    }
+                }
+                override fun onError(requestId: String, error: ErrorInfo) {
+                    onError(error.description ?: "Gagal mengunggah gambar")
+                }
+                override fun onReschedule(requestId: String, error: ErrorInfo) {}
+            })
+            .dispatch()
     }
 
     // --- PRODUCTS ---

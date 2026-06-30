@@ -83,7 +83,7 @@ class ItemDetailActivity : AppCompatActivity() {
             b.layoutAddComment.visibility = View.GONE
         } else {
             b.btnBuy.visibility  = View.VISIBLE
-            b.btnChat.visibility = View.GONE
+            b.btnChat.visibility = View.VISIBLE
             b.btnBuy.setOnClickListener  { showCheckoutDialog(item, fmt) }
             b.btnChat.setOnClickListener {
                 startActivity(Intent(this, ChatActivity::class.java).apply {
@@ -94,7 +94,6 @@ class ItemDetailActivity : AppCompatActivity() {
                     putExtra("item_name",       item.name)
                 })
             }
-            checkChatEligibility(item, myUid)
         }
 
         b.btnShare.setOnClickListener {
@@ -107,20 +106,7 @@ class ItemDetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkChatEligibility(item: FirestoreItem, myUid: String) {
-        if (myUid.isEmpty()) return
-        repo.firestore.collection("transactions")
-            .whereEqualTo("buyerUid", myUid)
-            .whereEqualTo("itemDocId", firestoreDocId)
-            .limit(1)
-            .get()
-            .addOnSuccessListener { snapshot ->
-                b.btnChat.visibility = if (!snapshot.isEmpty) View.VISIBLE else View.GONE
-            }
-            .addOnFailureListener {
-                b.btnChat.visibility = View.GONE
-            }
-    }
+
 
     private fun showCheckoutDialog(item: FirestoreItem, fmt: NumberFormat) {
         val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
