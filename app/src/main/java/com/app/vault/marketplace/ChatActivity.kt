@@ -80,6 +80,22 @@ class ChatActivity : AppCompatActivity() {
                 .addOnSuccessListener {
                     b.etMessage.setText("")
                     sendPushNotification(text)
+                    
+                    // Simpan metadata ke document parent agar bisa di-list di ChatListActivity
+                    val sellerUsername = intent.getStringExtra("seller_username") ?: ""
+                    val buyerUsername  = intent.getStringExtra("buyer_username")  ?: ""
+                    val myUid = Firebase.auth.currentUser?.uid ?: ""
+                    val recipientUsername = if (myUsername == sellerUsername) buyerUsername else sellerUsername
+                    
+                    val chatMeta = mapOf(
+                        "participants" to listOf(myUid, recipientUid),
+                        "participantUsernames" to listOf(myUsername, recipientUsername),
+                        "itemName" to itemName,
+                        "lastMessage" to text,
+                        "lastUpdated" to System.currentTimeMillis()
+                    )
+                    firestoreDb.collection("chats").document(chatRoomId)
+                        .set(chatMeta, SetOptions.merge())
                 }
         }
     }

@@ -53,6 +53,10 @@ class MarketFragment : Fragment() {
             applyFilters()
         }
 
+        b.fabChatList.setOnClickListener {
+            startActivity(Intent(requireContext(), ChatListActivity::class.java))
+        }
+
         startFirestoreListener()
     }
 
