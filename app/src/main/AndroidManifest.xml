@@ -39,6 +39,12 @@
         <activity android:name=".ProofUploadActivity" android:exported="false" />
         <activity android:name=".ChatActivity"     android:exported="false" />
         <activity android:name=".ChatListActivity" android:exported="false" />
+        <activity
+            android:name=".NewsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".SavedNewsActivity"
+            android:exported="false" />
 
         <!-- BroadcastReceiver: mendeteksi perubahan koneksi internet -->
         <receiver
