@@ -38,6 +38,15 @@ class MarketFragment : Fragment() {
         b.tvWelcome.text = "Hello, ${session.getUsername()}!"
         b.rvMarket.layoutManager = GridLayoutManager(requireContext(), 2)
 
+        val searchDbHelper = SearchDatabaseHelper(requireContext())
+        val recentSearches = searchDbHelper.getRecentSearches()
+        val searchAdapter = android.widget.ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_dropdown_item_1line,
+            recentSearches
+        )
+        b.etSearch.setAdapter(searchAdapter)
+
         b.etSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -47,6 +56,21 @@ class MarketFragment : Fragment() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
+        b.etSearch.setOnEditorActionListener { v, actionId, event ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                val query = b.etSearch.text.toString().trim()
+                if (query.isNotEmpty()) {
+                    searchDbHelper.saveSearch(query)
+                }
+                // Hide keyboard
+                val imm = requireContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                imm.hideSoftInputFromWindow(v.windowToken, 0)
+                true
+            } else {
+                false
+            }
+        }
+
         b.chipGroupFilter.setOnCheckedChangeListener { group, checkedId ->
             val chip = group.findViewById<Chip>(checkedId)
             currentCategory = chip?.text?.toString() ?: "All"
@@ -55,6 +79,10 @@ class MarketFragment : Fragment() {
 
         b.fabChatList.setOnClickListener {
             startActivity(Intent(requireContext(), ChatListActivity::class.java))
+        }
+
+        b.btnNews.setOnClickListener {
+            startActivity(Intent(requireContext(), NewsActivity::class.java))
         }
 
         startFirestoreListener()
